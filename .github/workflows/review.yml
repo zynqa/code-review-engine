@@ -117,19 +117,45 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run Claude Reviewer
-        uses: zynqa/code-review-engine/actions/claude-reviewer@main
+      - name: Checkout review engine
+        uses: actions/checkout@v4
         with:
-          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          jira-token: ${{ secrets.JIRA_TOKEN }}
-          jira-base-url: ${{ secrets.JIRA_BASE_URL }}
-          confluence-token: ${{ secrets.CONFLUENCE_TOKEN }}
-          confluence-base-url: ${{ secrets.CONFLUENCE_BASE_URL }}
-          slack-token: ${{ secrets.SLACK_TOKEN }}
-          magento-version: ${{ inputs.magento-version }}
-          strict-mode: ${{ inputs.strict-mode }}
-          jira-project-key: ${{ inputs.jira-project-key }}
-          github-token: ${{ github.token }}
+          repository: zynqa/code-review-engine
+          ref: main
+          path: .code-review-engine
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install reviewer dependencies
+        working-directory: .code-review-engine/actions/claude-reviewer
+        run: npm ci
+
+      - name: Run Claude Reviewer
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          CONFLUENCE_TOKEN: ${{ secrets.CONFLUENCE_TOKEN }}
+          CONFLUENCE_BASE_URL: ${{ secrets.CONFLUENCE_BASE_URL }}
+          SLACK_TOKEN: ${{ secrets.SLACK_TOKEN }}
+          MAGENTO_VERSION: ${{ inputs.magento-version }}
+          STRICT_MODE: ${{ inputs.strict-mode }}
+          JIRA_PROJECT_KEY: ${{ inputs.jira-project-key }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PROMPTS_PATH: ${{ github.workspace }}/.code-review-engine/prompts
+          CONFIG_PATH: ${{ github.workspace }}/.code-review-engine/config
+        run: node .code-review-engine/actions/claude-reviewer/src/index.js
 
   # ─────────────────────────────────────────
   # Layer 3 — Tests (opt-in per project)
