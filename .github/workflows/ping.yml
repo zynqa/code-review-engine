@@ -1,0 +1,12 @@
+name: Reusable Workflow Ping
+
+on:
+  workflow_call:
+
+jobs:
+  ping:
+    name: Ping
+    runs-on: ubuntu-latest
+    steps:
+      - name: Echo
+        run: echo "Reusable workflow is reachable"
