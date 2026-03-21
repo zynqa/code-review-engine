@@ -1,0 +1,19 @@
+name: Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  review:
+    uses: zynqa/code-review-engine/.github/workflows/review.yml@main
+    with:
+      magento-version: "2.4.7"       # Update to match this project
+      strict-mode: false             # Set true for production-critical repos
+      jira-project-key: "PROJ"       # Update to this project's Jira key
+
+      # Layer toggles — enable only what this project has configured
+      enable-static-analysis: true   # No dependencies — always safe to enable
+      enable-ai-review: true         # Requires ANTHROPIC_API_KEY org secret
+      enable-tests: false            # Enable once PHPUnit suite is set up
+    secrets: inherit

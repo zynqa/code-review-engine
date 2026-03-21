@@ -1,0 +1,50 @@
+# Zynqa Code Review Severity Rules
+# Controls what Claude flags as blocking vs warning vs info
+
+blocking:
+  categories:
+    - security
+    - business_logic
+    - data_integrity
+  patterns:
+    - objectmanager_direct_use
+    - core_file_modification
+    - sql_injection
+    - xss_vulnerability
+    - hardcoded_credentials
+    - missing_acl
+
+warnings:
+  categories:
+    - code_quality
+    - performance
+    - magento_standards
+  patterns:
+    - n_plus_one_query
+    - missing_di_interface
+    - plugin_conflict_risk
+    - missing_tests
+
+info:
+  categories:
+    - style
+    - naming
+    - documentation
+  patterns:
+    - missing_phpdoc
+    - naming_convention
+    - code_duplication
+
+# Missing context severity overrides
+missing_context:
+  no_jira_ticket: WARNING       # PR has no linked Jira ticket
+  contradicts_requirements: BLOCKING  # Code contradicts documented requirements
+  ambiguous_requirements: INFO  # Requirements exist but are unclear
+
+# Strict mode overrides (when strict-mode: true is passed)
+strict_mode_overrides:
+  # Elevate these from WARNING to BLOCKING in strict mode
+  elevate_to_blocking:
+    - missing_tests
+    - missing_di_interface
+    - n_plus_one_query
