@@ -1,0 +1,31 @@
+name: Claude Code Review Static Only
+
+on:
+  workflow_call:
+    inputs:
+      enable-static-analysis:
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  static-analysis:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+    if: inputs.enable-static-analysis == true
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer, cs2pr
+
+      - name: Echo
+        run: echo "Static analysis workflow parsed"
