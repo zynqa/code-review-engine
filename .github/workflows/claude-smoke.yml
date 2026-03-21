@@ -1,0 +1,63 @@
+name: Claude Action Smoke
+
+on:
+  workflow_call:
+    inputs:
+      magento-version:
+        required: false
+        default: '2.4.7'
+        type: string
+      strict-mode:
+        required: false
+        default: false
+        type: boolean
+      jira-project-key:
+        required: false
+        default: ''
+        type: string
+      enable-ai-review:
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: false
+      JIRA_TOKEN:
+        required: false
+      JIRA_BASE_URL:
+        required: false
+      CONFLUENCE_TOKEN:
+        required: false
+      CONFLUENCE_BASE_URL:
+        required: false
+      SLACK_TOKEN:
+        required: false
+
+jobs:
+  claude-review:
+    name: Claude AI Code Review
+    runs-on: ubuntu-latest
+    if: inputs.enable-ai-review == true && secrets.ANTHROPIC_API_KEY != ''
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Claude Reviewer
+        uses: zynqa/code-review-engine/actions/claude-reviewer@main
+        with:
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          jira-token: ${{ secrets.JIRA_TOKEN }}
+          jira-base-url: ${{ secrets.JIRA_BASE_URL }}
+          confluence-token: ${{ secrets.CONFLUENCE_TOKEN }}
+          confluence-base-url: ${{ secrets.CONFLUENCE_BASE_URL }}
+          slack-token: ${{ secrets.SLACK_TOKEN }}
+          magento-version: ${{ inputs.magento-version }}
+          strict-mode: ${{ inputs.strict-mode }}
+          jira-project-key: ${{ inputs.jira-project-key }}
+          github-token: ${{ github.token }}
