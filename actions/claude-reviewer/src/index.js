@@ -37,18 +37,30 @@ async function main() {
   let slackContext = null;
 
   if (jiraTicketId) {
-    console.log(`📋 Fetching Jira context for ${jiraTicketId}...`);
-    jiraContext = await fetchJiraContext(jiraTicketId);
+    if (process.env.JIRA_TOKEN && process.env.JIRA_BASE_URL) {
+      console.log(`📋 Fetching Jira context for ${jiraTicketId}...`);
+      jiraContext = await fetchJiraContext(jiraTicketId);
+    } else {
+      console.log('⚠️  Jira credentials are not configured. Proceeding without Jira context.');
+    }
   } else {
     console.log('⚠️  No Jira ticket found. Proceeding without Jira context.');
   }
 
   if (jiraContext) {
-    console.log('📚 Fetching Confluence context...');
-    confluenceContext = await fetchConfluenceContext(jiraContext);
+    if (process.env.CONFLUENCE_TOKEN && process.env.CONFLUENCE_BASE_URL) {
+      console.log('📚 Fetching Confluence context...');
+      confluenceContext = await fetchConfluenceContext(jiraContext);
+    } else {
+      console.log('⚠️  Confluence credentials are not configured. Proceeding without Confluence context.');
+    }
 
-    console.log('💬 Fetching Slack context...');
-    slackContext = await fetchSlackContext(jiraTicketId, jiraContext);
+    if (process.env.SLACK_TOKEN) {
+      console.log('💬 Fetching Slack context...');
+      slackContext = await fetchSlackContext(jiraTicketId, jiraContext);
+    } else {
+      console.log('⚠️  Slack credentials are not configured. Proceeding without Slack context.');
+    }
   }
 
   // 4. Load system prompt
