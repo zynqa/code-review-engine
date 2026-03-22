@@ -185,6 +185,11 @@ function buildSummary(findings) {
   return body;
 }
 
+function formatReviewComment(finding) {
+  const marker = '<!-- zynqa-static-analysis-inline -->';
+  return `${marker}\n**${finding.tool}** (${finding.rule || 'Issue'})\n\n${finding.message}`;
+}
+
 async function githubRequest(url, options = {}) {
   const response = await fetch(url, {
     ...options,
@@ -243,6 +248,78 @@ async function upsertSummaryComment(body) {
   );
 }
 
+async function listReviewComments() {
+  const owner = process.env.REPO_OWNER;
+  const repo = process.env.REPO_NAME;
+  const pullNumber = process.env.PR_NUMBER;
+  return githubRequest(
+    `https://api.github.com/repos/${owner}/${repo}/pulls/${pullNumber}/comments?per_page=100`
+  );
+}
+
+async function deleteReviewComment(commentId) {
+  const owner = process.env.REPO_OWNER;
+  const repo = process.env.REPO_NAME;
+  await githubRequest(
+    `https://api.github.com/repos/${owner}/${repo}/pulls/comments/${commentId}`,
+    { method: 'DELETE' }
+  );
+}
+
+async function clearPreviousInlineComments() {
+  const marker = '<!-- zynqa-static-analysis-inline -->';
+  const comments = await listReviewComments();
+  const previous = comments.filter(
+    (comment) =>
+      comment.user?.type === 'Bot' &&
+      typeof comment.body === 'string' &&
+      comment.body.includes(marker)
+  );
+
+  for (const comment of previous) {
+    await deleteReviewComment(comment.id);
+  }
+}
+
+async function postInlineComments(findings) {
+  const owner = process.env.REPO_OWNER;
+  const repo = process.env.REPO_NAME;
+  const pullNumber = process.env.PR_NUMBER;
+  const commitId = process.env.HEAD_SHA;
+  const maxInlineComments = Number(process.env.MAX_INLINE_COMMENTS || 30);
+
+  const reviewable = findings
+    .filter((finding) => finding.path && finding.line)
+    .slice(0, maxInlineComments);
+
+  await clearPreviousInlineComments();
+
+  let posted = 0;
+  for (const finding of reviewable) {
+    try {
+      await githubRequest(
+        `https://api.github.com/repos/${owner}/${repo}/pulls/${pullNumber}/comments`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            body: formatReviewComment(finding),
+            commit_id: commitId,
+            path: finding.path,
+            line: finding.line,
+            side: 'RIGHT',
+          }),
+        }
+      );
+      posted += 1;
+    } catch (error) {
+      console.warn(`Could not post inline comment for ${finding.path}:${finding.line}: ${error.message}`);
+    }
+  }
+
+  return posted;
+}
+
 function setOutput(name, value) {
   const outputPath = process.env.GITHUB_OUTPUT;
   if (!outputPath) return;
@@ -258,12 +335,14 @@ async function main() {
   ]).filter((finding) => finding.path && finding.line);
 
   findings.forEach(emitAnnotation);
+  const inlineCommentsPosted = await postInlineComments(findings);
 
   const summary = buildSummary(findings);
   await upsertSummaryComment(summary);
 
   setOutput('total_findings', findings.length);
   setOutput('has_findings', findings.length > 0 ? 'true' : 'false');
+  setOutput('inline_comments_posted', inlineCommentsPosted);
 }
 
 main().catch((error) => {
