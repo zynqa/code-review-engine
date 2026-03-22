@@ -92,6 +92,14 @@ jobs:
             console.log(`PHPCS targets: ${phpcsFiles.length}`);
             console.log(`PHPStan/PHPMD targets: ${phpFiles.length}`);
 
+      - name: Checkout review engine
+        if: steps.changed-files.outputs.phpcs_count != '0' || steps.changed-files.outputs.php_count != '0'
+        uses: actions/checkout@v4
+        with:
+          repository: zynqa/code-review-engine
+          ref: main
+          path: .code-review-engine
+
       - name: Setup PHP
         if: steps.changed-files.outputs.phpcs_count != '0' || steps.changed-files.outputs.php_count != '0'
         uses: shivammathur/setup-php@v2
@@ -113,7 +121,7 @@ jobs:
         if: steps.changed-files.outputs.phpcs_count != '0'
         run: |
           COMPOSER_HOME="$(composer global config home)"
-          phpcs --config-set installed_paths "${COMPOSER_HOME}/vendor/magento/magento-coding-standard,${COMPOSER_HOME}/vendor/phpcompatibility/php-compatibility"
+          phpcs --config-set installed_paths "${COMPOSER_HOME}/vendor/magento/magento-coding-standard,${COMPOSER_HOME}/vendor/phpcompatibility/php-compatibility,${GITHUB_WORKSPACE}/.code-review-engine/phpcs"
           phpcs -i
 
       - name: PHP_CodeSniffer — Magento Coding Standard
@@ -121,7 +129,7 @@ jobs:
         if: steps.changed-files.outputs.phpcs_count != '0'
         run: |
           set +e
-          phpcs --standard=Magento2 \
+          phpcs --standard=Zynqa \
                 --extensions=php,phtml \
                 --report=json \
                 --report-file=phpcs-report.json \
@@ -155,14 +163,6 @@ jobs:
           exit_code=$?
           echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
           exit 0
-
-      - name: Checkout review engine
-        if: always() && (steps.changed-files.outputs.phpcs_count != '0' || steps.changed-files.outputs.php_count != '0')
-        uses: actions/checkout@v4
-        with:
-          repository: zynqa/code-review-engine
-          ref: main
-          path: .code-review-engine
 
       - name: Setup Node.js
         if: always() && (steps.changed-files.outputs.phpcs_count != '0' || steps.changed-files.outputs.php_count != '0')
