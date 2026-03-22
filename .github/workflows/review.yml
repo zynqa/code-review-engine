@@ -106,18 +106,32 @@ jobs:
   claude-review:
     name: Claude AI Code Review
     runs-on: ubuntu-latest
-    if: inputs.enable-ai-review == true && secrets.ANTHROPIC_API_KEY != ''
+    if: inputs.enable-ai-review == true
     permissions:
       pull-requests: write
       contents: read
 
     steps:
+      - name: Check Claude configuration
+        id: claude-config
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Anthropic API key is not configured. Skipping AI review."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout repository
+        if: steps.claude-config.outputs.skip != 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Checkout review engine
+        if: steps.claude-config.outputs.skip != 'true'
         uses: actions/checkout@v4
         with:
           repository: zynqa/code-review-engine
@@ -125,15 +139,18 @@ jobs:
           path: .code-review-engine
 
       - name: Setup Node.js
+        if: steps.claude-config.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Install reviewer dependencies
+        if: steps.claude-config.outputs.skip != 'true'
         working-directory: .code-review-engine/actions/claude-reviewer
         run: npm ci
 
       - name: Run Claude Reviewer
+        if: steps.claude-config.outputs.skip != 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
