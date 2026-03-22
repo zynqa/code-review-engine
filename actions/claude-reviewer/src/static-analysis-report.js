@@ -153,9 +153,6 @@ function countByTool(findings) {
 }
 
 function buildSummary(findings) {
-  const owner = process.env.REPO_OWNER;
-  const repo = process.env.REPO_NAME;
-  const sha = process.env.HEAD_SHA;
   const toolCounts = countByTool(findings);
   const total = findings.length;
   const marker = '<!-- zynqa-static-analysis-summary -->';
@@ -171,16 +168,7 @@ function buildSummary(findings) {
   body += Object.entries(toolCounts)
     .map(([tool, count]) => `- **${tool}**: ${count}`)
     .join('\n');
-  body += '\n\n### Findings\n';
-
-  for (const finding of findings.slice(0, 50)) {
-    const url = `https://github.com/${owner}/${repo}/blob/${sha}/${finding.path}#L${finding.line}`;
-    body += `- [${finding.path}:L${finding.line}](${url}) | **${finding.tool}** | ${finding.message}\n`;
-  }
-
-  if (total > 50) {
-    body += `\n_Only the first 50 findings are listed here._\n`;
-  }
+  body += '\n\nSee the inline review comments and GitHub annotations for line-level details.\n';
 
   return body;
 }
