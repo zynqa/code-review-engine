@@ -1,0 +1,54 @@
+name: Review Contract Smoke
+
+on:
+  workflow_call:
+    inputs:
+      magento-version:
+        required: false
+        default: '2.4.7'
+        type: string
+      strict-mode:
+        required: false
+        default: false
+        type: boolean
+      jira-project-key:
+        required: false
+        default: ''
+        type: string
+      enable-static-analysis:
+        required: false
+        default: true
+        type: boolean
+      enable-ai-review:
+        required: false
+        default: true
+        type: boolean
+      enable-tests:
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: false
+      JIRA_TOKEN:
+        required: false
+      JIRA_BASE_URL:
+        required: false
+      CONFLUENCE_TOKEN:
+        required: false
+      CONFLUENCE_BASE_URL:
+        required: false
+      SLACK_TOKEN:
+        required: false
+
+jobs:
+  smoke:
+    name: Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Echo
+        run: |
+          echo "Contract smoke workflow ran"
+          echo "enable-static-analysis=${{ inputs.enable-static-analysis }}"
+          echo "enable-ai-review=${{ inputs.enable-ai-review }}"
+          echo "enable-tests=${{ inputs.enable-tests }}"
