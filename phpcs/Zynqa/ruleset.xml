@@ -3,5 +3,6 @@
   <description>Zynqa PHPCS standard extending Magento with project-specific architecture rules.</description>
 
   <rule ref="Magento2" />
+  <rule ref="Zynqa.Files.StrictTypesDeclaration" />
   <rule ref="Zynqa.Helpers.StatelessHelper" />
 </ruleset>
