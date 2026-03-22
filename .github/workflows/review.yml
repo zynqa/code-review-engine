@@ -63,35 +63,44 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Discover analysis targets
-        id: targets
-        shell: bash
-        run: |
-          targets=()
-          [ -d src ] && targets+=("src")
-          [ -d app/code ] && targets+=("app/code")
+      - name: Collect changed files
+        id: changed-files
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
 
-          {
-            echo "count=${#targets[@]}"
-            echo "paths=${targets[*]}"
-            echo "csv=$(IFS=,; echo "${targets[*]}")"
-          } >> "$GITHUB_OUTPUT"
+            const eligibleStatuses = new Set(['added', 'modified', 'renamed', 'copied', 'changed']);
+            const phpcsFiles = files
+              .filter((file) => eligibleStatuses.has(file.status))
+              .map((file) => file.filename)
+              .filter((filename) => /\.(php|phtml)$/i.test(filename));
+            const phpFiles = phpcsFiles.filter((filename) => /\.php$/i.test(filename));
 
-          if [ ${#targets[@]} -eq 0 ]; then
-            echo "No supported analysis targets found. Expected src and/or app/code."
-          else
-            printf 'Analysis targets: %s\n' "${targets[*]}"
-          fi
+            core.setOutput('phpcs_paths', phpcsFiles.join(' '));
+            core.setOutput('phpcs_count', String(phpcsFiles.length));
+            core.setOutput('php_paths', phpFiles.join(' '));
+            core.setOutput('php_paths_csv', phpFiles.join(','));
+            core.setOutput('php_count', String(phpFiles.length));
+
+            console.log(`PHPCS targets: ${phpcsFiles.length}`);
+            console.log(`PHPStan/PHPMD targets: ${phpFiles.length}`);
 
       - name: Setup PHP
-        if: steps.targets.outputs.count != '0'
+        if: steps.changed-files.outputs.phpcs_count != '0' || steps.changed-files.outputs.php_count != '0'
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-          tools: composer, cs2pr
+          tools: composer
 
       - name: Install analysis tools
-        if: steps.targets.outputs.count != '0'
+        if: steps.changed-files.outputs.phpcs_count != '0' || steps.changed-files.outputs.php_count != '0'
         run: |
           composer global require \
             "squizlabs/php_codesniffer:^3.7" \
@@ -100,40 +109,47 @@ jobs:
             "magento/magento-coding-standard:^26" \
             --no-interaction --no-progress
 
+      - name: Register PHPCS standards
+        if: steps.changed-files.outputs.phpcs_count != '0'
+        run: |
+          COMPOSER_HOME="$(composer global config home)"
+          phpcs --config-set installed_paths "${COMPOSER_HOME}/vendor/magento/magento-coding-standard,${COMPOSER_HOME}/vendor/phpcompatibility/php-compatibility"
+          phpcs -i
+
       - name: PHP_CodeSniffer — Magento Coding Standard
         id: phpcs
-        if: steps.targets.outputs.count != '0'
+        if: steps.changed-files.outputs.phpcs_count != '0'
         run: |
           set +e
           phpcs --standard=Magento2 \
-                --extensions=php \
+                --extensions=php,phtml \
                 --report=json \
                 --report-file=phpcs-report.json \
-                ${{ steps.targets.outputs.paths }}
+                ${{ steps.changed-files.outputs.phpcs_paths }}
           exit_code=$?
           echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
           exit 0
 
       - name: PHPStan
         id: phpstan
-        if: steps.targets.outputs.count != '0'
+        if: steps.changed-files.outputs.php_count != '0'
         run: |
           set +e
           phpstan analyse \
             --level=6 \
             --no-progress \
             --error-format=json \
-            ${{ steps.targets.outputs.paths }} > phpstan-report.json
+            ${{ steps.changed-files.outputs.php_paths }} > phpstan-report.json
           exit_code=$?
           echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
           exit 0
 
       - name: PHP Mess Detector
         id: phpmd
-        if: steps.targets.outputs.count != '0'
+        if: steps.changed-files.outputs.php_count != '0'
         run: |
           set +e
-          phpmd "${{ steps.targets.outputs.csv }}" xml \
+          phpmd "${{ steps.changed-files.outputs.php_paths_csv }}" xml \
             cleancode,codesize,controversial,design,naming,unusedcode \
             --reportfile phpmd-report.xml
           exit_code=$?
@@ -141,7 +157,7 @@ jobs:
           exit 0
 
       - name: Checkout review engine
-        if: always() && steps.targets.outputs.count != '0'
+        if: always() && (steps.changed-files.outputs.phpcs_count != '0' || steps.changed-files.outputs.php_count != '0')
         uses: actions/checkout@v4
         with:
           repository: zynqa/code-review-engine
@@ -149,14 +165,14 @@ jobs:
           path: .code-review-engine
 
       - name: Setup Node.js
-        if: always() && steps.targets.outputs.count != '0'
+        if: always() && (steps.changed-files.outputs.phpcs_count != '0' || steps.changed-files.outputs.php_count != '0')
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Publish static-analysis findings
         id: static-report
-        if: always() && steps.targets.outputs.count != '0'
+        if: always() && (steps.changed-files.outputs.phpcs_count != '0' || steps.changed-files.outputs.php_count != '0')
         env:
           GITHUB_TOKEN: ${{ github.token }}
           REPO_OWNER: ${{ github.repository_owner }}
@@ -167,7 +183,7 @@ jobs:
         run: node .code-review-engine/actions/claude-reviewer/src/static-analysis-report.js
 
       - name: Fail on static-analysis findings
-        if: always() && steps.targets.outputs.count != '0'
+        if: always() && (steps.changed-files.outputs.phpcs_count != '0' || steps.changed-files.outputs.php_count != '0')
         run: |
           if [ "${{ steps.static-report.outputs.has_findings }}" = "true" ]; then
             echo "Static analysis found ${{ steps.static-report.outputs.total_findings }} issue(s)."
