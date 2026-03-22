@@ -23,6 +23,11 @@ on:
         required: false
         default: true
         type: boolean
+      enable-module-registration:
+        description: 'Enable Magento module registration validation'
+        required: false
+        default: true
+        type: boolean
       enable-ai-review:
         description: 'Enable Layer 2 — Claude AI review'
         required: false
@@ -51,6 +56,7 @@ jobs:
   module-registration:
     name: Magento Module Registration
     runs-on: ubuntu-latest
+    if: inputs.enable-module-registration == true
     permissions:
       contents: read
       pull-requests: read
@@ -250,20 +256,18 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           if [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "Anthropic API key is not configured. Skipping AI review."
+            echo "Anthropic API key is not configured. AI review is enabled, so this job cannot run."
+            exit 1
           else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Claude configuration is present."
           fi
 
       - name: Checkout repository
-        if: steps.claude-config.outputs.skip != 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Checkout review engine
-        if: steps.claude-config.outputs.skip != 'true'
         uses: actions/checkout@v4
         with:
           repository: zynqa/code-review-engine
@@ -271,18 +275,15 @@ jobs:
           path: .code-review-engine
 
       - name: Setup Node.js
-        if: steps.claude-config.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Install reviewer dependencies
-        if: steps.claude-config.outputs.skip != 'true'
         working-directory: .code-review-engine/actions/claude-reviewer
         run: npm ci
 
       - name: Run Claude Reviewer
-        if: steps.claude-config.outputs.skip != 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
@@ -342,10 +343,22 @@ jobs:
     needs: [module-registration, static-analysis, claude-review, tests]
     if: |
       always() &&
-      (needs.module-registration.result == 'success' || needs.module-registration.result == 'skipped') &&
-      (needs.static-analysis.result == 'success' || needs.static-analysis.result == 'skipped') &&
-      (needs.claude-review.result == 'success' || needs.claude-review.result == 'skipped') &&
-      (needs.tests.result == 'success' || needs.tests.result == 'skipped')
+      (
+        (inputs.enable-module-registration == true && needs.module-registration.result == 'success') ||
+        (inputs.enable-module-registration != true && needs.module-registration.result == 'skipped')
+      ) &&
+      (
+        (inputs.enable-static-analysis == true && needs.static-analysis.result == 'success') ||
+        (inputs.enable-static-analysis != true && needs.static-analysis.result == 'skipped')
+      ) &&
+      (
+        (inputs.enable-ai-review == true && needs.claude-review.result == 'success') ||
+        (inputs.enable-ai-review != true && needs.claude-review.result == 'skipped')
+      ) &&
+      (
+        (inputs.enable-tests == true && needs.tests.result == 'success') ||
+        (inputs.enable-tests != true && needs.tests.result == 'skipped')
+      )
     permissions:
       pull-requests: write
       contents: write
