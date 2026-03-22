@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 class Zynqa_Sniffs_Controllers_AdminhtmlControllerSniff implements PHP_CodeSniffer\Sniffs\Sniff
 {
     public function register()

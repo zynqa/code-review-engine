@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 class Zynqa_Sniffs_Files_ForbiddenRuntimeFunctionsSniff implements PHP_CodeSniffer\Sniffs\Sniff
 {
     private $forbiddenFunctions = [

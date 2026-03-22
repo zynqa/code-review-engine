@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 class Zynqa_Sniffs_Files_ObjectManagerUsageSniff implements PHP_CodeSniffer\Sniffs\Sniff
 {
     public function register()
