@@ -2,7 +2,7 @@ name: Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, edited, synchronize, reopened]
 
 jobs:
   review:
@@ -13,6 +13,7 @@ jobs:
       jira-project-key: "PROJ"       # Update to this project's Jira key
 
       # Layer toggles — enable only what this project has configured
+      enable-pr-validation: false    # Enable to enforce Jira-linked title, branch, description, and commits
       enable-module-registration: true # Disable only if this repo does not want Magento registration validation
       enable-static-analysis: true   # No dependencies — always safe to enable
       enable-ai-review: true         # Requires ANTHROPIC_API_KEY org secret
