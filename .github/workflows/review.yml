@@ -23,6 +23,11 @@ on:
         required: false
         default: false
         type: boolean
+      enable-auto-approval:
+        description: 'Allow the workflow to submit an approval review before merging'
+        required: false
+        default: false
+        type: boolean
       enable-static-analysis:
         description: 'Enable Layer 1 — PHP_CodeSniffer, PHPStan, PHPMD'
         required: false
@@ -428,6 +433,33 @@ jobs:
 
             if (!mergeMethod) {
               throw new Error('No merge methods are enabled for this repository.');
+            }
+
+            if (${{ inputs.enable-auto-approval }}) {
+              const { data: reviews } = await github.rest.pulls.listReviews({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.payload.pull_request.number,
+              });
+
+              const latestStatesByAuthor = new Map();
+              for (const review of reviews) {
+                if (!review.user || !review.user.login) {
+                  continue;
+                }
+
+                latestStatesByAuthor.set(review.user.login, review.state);
+              }
+
+              if (latestStatesByAuthor.get('github-actions[bot]') !== 'APPROVED') {
+                await github.rest.pulls.createReview({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: context.payload.pull_request.number,
+                  event: 'APPROVE',
+                  body: 'Automatically approved after all configured review-engine checks passed.',
+                });
+              }
             }
 
             try {
