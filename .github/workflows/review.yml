@@ -494,7 +494,7 @@ jobs:
 
             const pullRequest = pullRequestData.repository.pullRequest;
             if (!pullRequest.autoMergeRequest) {
-              await github.graphql(`
+              const enableAutoMerge = async () => github.graphql(`
                 mutation($pullRequestId: ID!, $mergeMethod: PullRequestMergeMethod!) {
                   enablePullRequestAutoMerge(input: {
                     pullRequestId: $pullRequestId
@@ -509,6 +509,28 @@ jobs:
                 pullRequestId: pullRequest.id,
                 mergeMethod: mergeMethod.toUpperCase(),
               });
+
+              let lastError = null;
+              for (let attempt = 1; attempt <= 6; attempt++) {
+                try {
+                  await enableAutoMerge();
+                  lastError = null;
+                  break;
+                } catch (error) {
+                  const message = String(error.message || error);
+                  if (!message.includes('unstable status')) {
+                    throw error;
+                  }
+
+                  lastError = error;
+                  console.log(`PR is still unstable for auto-merge (attempt ${attempt}/6). Waiting 10s...`);
+                  await new Promise((resolve) => setTimeout(resolve, 10000));
+                }
+              }
+
+              if (lastError) {
+                throw lastError;
+              }
             } else {
               console.log('Auto-merge is already enabled for this pull request.');
             }
