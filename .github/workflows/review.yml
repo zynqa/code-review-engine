@@ -493,44 +493,71 @@ jobs:
             });
 
             const pullRequest = pullRequestData.repository.pullRequest;
-            if (!pullRequest.autoMergeRequest) {
-              const enableAutoMerge = async () => github.graphql(`
-                mutation($pullRequestId: ID!, $mergeMethod: PullRequestMergeMethod!) {
-                  enablePullRequestAutoMerge(input: {
-                    pullRequestId: $pullRequestId
-                    mergeMethod: $mergeMethod
-                  }) {
-                    pullRequest {
-                      number
-                    }
+            const enableAutoMerge = async () => github.graphql(`
+              mutation($pullRequestId: ID!, $mergeMethod: PullRequestMergeMethod!) {
+                enablePullRequestAutoMerge(input: {
+                  pullRequestId: $pullRequestId
+                  mergeMethod: $mergeMethod
+                }) {
+                  pullRequest {
+                    number
                   }
                 }
-              `, {
-                pullRequestId: pullRequest.id,
-                mergeMethod: mergeMethod.toUpperCase(),
+              }
+            `, {
+              pullRequestId: pullRequest.id,
+              mergeMethod: mergeMethod.toUpperCase(),
+            });
+
+            try {
+              await github.rest.pulls.merge({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.payload.pull_request.number,
+                merge_method: mergeMethod,
               });
+              console.log('Pull request merged directly.');
+              return;
+            } catch (error) {
+              const message = String(error.message || error);
+              const shouldFallbackToAutoMerge =
+                error.status === 405 ||
+                message.includes('protected ref') ||
+                message.includes('Repository rule violations found');
 
-              let lastError = null;
-              for (let attempt = 1; attempt <= 6; attempt++) {
-                try {
-                  await enableAutoMerge();
-                  lastError = null;
-                  break;
-                } catch (error) {
-                  const message = String(error.message || error);
-                  if (!message.includes('unstable status')) {
-                    throw error;
+              if (!shouldFallbackToAutoMerge) {
+                throw error;
+              }
+
+              console.log(`Direct merge is blocked (${message}). Falling back to native auto-merge.`);
+            }
+
+            if (!pullRequest.autoMergeRequest) {
+              const enableAutoMergeWithRetry = async () => {
+                let lastError = null;
+                for (let attempt = 1; attempt <= 6; attempt++) {
+                  try {
+                    await enableAutoMerge();
+                    lastError = null;
+                    return;
+                  } catch (error) {
+                    const message = String(error.message || error);
+                    if (!message.includes('unstable status')) {
+                      throw error;
+                    }
+
+                    lastError = error;
+                    console.log(`PR is still unstable for auto-merge (attempt ${attempt}/6). Waiting 10s...`);
+                    await new Promise((resolve) => setTimeout(resolve, 10000));
                   }
-
-                  lastError = error;
-                  console.log(`PR is still unstable for auto-merge (attempt ${attempt}/6). Waiting 10s...`);
-                  await new Promise((resolve) => setTimeout(resolve, 10000));
                 }
-              }
 
-              if (lastError) {
-                throw lastError;
-              }
+                if (lastError) {
+                  throw lastError;
+                }
+              };
+
+              await enableAutoMergeWithRetry();
             } else {
               console.log('Auto-merge is already enabled for this pull request.');
             }
