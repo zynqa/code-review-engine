@@ -475,7 +475,7 @@ jobs:
               console.log('PR branch is already up to date with the base branch.');
             }
 
-            const { data: pullRequestData } = await github.graphql(`
+            const pullRequestData = await github.graphql(`
               query($owner: String!, $repo: String!, $number: Int!) {
                 repository(owner: $owner, name: $repo) {
                   pullRequest(number: $number) {
