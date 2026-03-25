@@ -475,9 +475,40 @@ jobs:
               console.log('PR branch is already up to date with the base branch.');
             }
 
-            await github.rest.pulls.merge({
+            const { data: pullRequestData } = await github.graphql(`
+              query($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    id
+                    autoMergeRequest {
+                      enabledAt
+                    }
+                  }
+                }
+              }
+            `, {
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: context.payload.pull_request.number,
-              merge_method: mergeMethod,
+              number: context.payload.pull_request.number,
             });
+
+            const pullRequest = pullRequestData.repository.pullRequest;
+            if (!pullRequest.autoMergeRequest) {
+              await github.graphql(`
+                mutation($pullRequestId: ID!, $mergeMethod: PullRequestMergeMethod!) {
+                  enablePullRequestAutoMerge(input: {
+                    pullRequestId: $pullRequestId
+                    mergeMethod: $mergeMethod
+                  }) {
+                    pullRequest {
+                      number
+                    }
+                  }
+                }
+              `, {
+                pullRequestId: pullRequest.id,
+                mergeMethod: mergeMethod.toUpperCase(),
+              });
+            } else {
+              console.log('Auto-merge is already enabled for this pull request.');
+            }
