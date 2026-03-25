@@ -413,6 +413,23 @@ jobs:
         with:
           github-token: ${{ github.token }}
           script: |
+            const { data: repository } = await github.rest.repos.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+
+            const mergeMethod = repository.allow_squash_merge
+              ? 'squash'
+              : repository.allow_merge_commit
+                ? 'merge'
+                : repository.allow_rebase_merge
+                  ? 'rebase'
+                  : null;
+
+            if (!mergeMethod) {
+              throw new Error('No merge methods are enabled for this repository.');
+            }
+
             try {
               await github.rest.pulls.updateBranch({
                 owner: context.repo.owner,
@@ -430,5 +447,5 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: context.payload.pull_request.number,
-              merge_method: 'squash',
+              merge_method: mergeMethod,
             });
