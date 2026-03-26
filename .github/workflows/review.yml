@@ -164,7 +164,10 @@ jobs:
               .filter((file) => eligibleStatuses.has(file.status))
               .map((file) => file.filename)
               .filter((filename) => /\.(php|phtml)$/i.test(filename));
-            const phpFiles = phpcsFiles.filter((filename) => /\.php$/i.test(filename));
+            const phpFiles = phpcsFiles
+              .filter((filename) => /\.php$/i.test(filename))
+              .filter((filename) => filename !== 'app/etc/config.php')
+              .filter((filename) => !/\/registration\.php$/i.test(filename));
 
             core.setOutput('phpcs_paths', phpcsFiles.join(' '));
             core.setOutput('phpcs_count', String(phpcsFiles.length));

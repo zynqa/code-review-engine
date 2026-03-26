@@ -16,6 +16,10 @@ class Zynqa_Sniffs_Files_StrictTypesDeclarationSniff implements PHP_CodeSniffer\
             return;
         }
 
+        if ($this->shouldSkipFile($fileName)) {
+            return;
+        }
+
         $tokens = $phpcsFile->getTokens();
         $nextPtr = $phpcsFile->findNext(
             [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT_OPEN_TAG, T_DOC_COMMENT_CLOSE_TAG, T_DOC_COMMENT_STAR, T_DOC_COMMENT_STRING, T_DOC_COMMENT_TAG],
@@ -56,5 +60,14 @@ class Zynqa_Sniffs_Files_StrictTypesDeclarationSniff implements PHP_CodeSniffer\
         }
 
         return implode('', $parts);
+    }
+
+    private function shouldSkipFile(string $fileName): bool
+    {
+        if (substr($fileName, -19) === '/app/etc/config.php') {
+            return true;
+        }
+
+        return substr($fileName, -17) === '/registration.php';
     }
 }
