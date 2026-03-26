@@ -41,30 +41,21 @@ class Zynqa_Sniffs_Controllers_AdminhtmlControllerSniff implements PHP_CodeSniff
 
     private function extendsBackendAction(PHP_CodeSniffer\Files\File $phpcsFile, $stackPtr)
     {
-        $tokens = $phpcsFile->getTokens();
-        $extendsPtr = $phpcsFile->findNext(T_EXTENDS, $stackPtr + 1, null, false, null, true);
-        if ($extendsPtr === false) {
+        $contents = $phpcsFile->getTokensAsString(0, count($phpcsFile->getTokens()));
+        if (!preg_match('/class\s+\w+\s+extends\s+([\\\\A-Za-z_][\\\\A-Za-z0-9_]*)/m', $contents, $matches)) {
             return false;
         }
 
-        $classToken = $tokens[$stackPtr];
-        if (!empty($classToken['scope_opener']) && $extendsPtr > $classToken['scope_opener']) {
+        $normalized = ltrim(str_replace('\\\\', '\\', $matches[1]), '\\');
+        if ($normalized === 'Magento\Backend\App\Action') {
+            return true;
+        }
+
+        if (strpos($normalized, '\\') !== false) {
             return false;
         }
 
-        $name = '';
-        for ($ptr = $extendsPtr + 1; $ptr < count($tokens); $ptr++) {
-            if (in_array($tokens[$ptr]['code'], [T_WHITESPACE, T_NS_SEPARATOR, T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED], true)) {
-                $name .= $tokens[$ptr]['content'];
-                continue;
-            }
-
-            break;
-        }
-
-        $normalized = ltrim(str_replace('\\\\', '\\', $name), '\\');
-
-        return $normalized === 'Magento\Backend\App\Action';
+        return $normalized === $this->resolveBackendActionAlias($phpcsFile);
     }
 
     private function hasAdminResourceConst(array $tokens, $scopeOpener, $scopeCloser)
@@ -92,5 +83,15 @@ class Zynqa_Sniffs_Controllers_AdminhtmlControllerSniff implements PHP_CodeSniff
         }
 
         return false;
+    }
+
+    private function resolveBackendActionAlias(PHP_CodeSniffer\Files\File $phpcsFile): string
+    {
+        $contents = $phpcsFile->getTokensAsString(0, count($phpcsFile->getTokens()));
+        if (!preg_match('/use\s+Magento\\\\Backend\\\\App\\\\Action(?:\s+as\s+([A-Za-z_][A-Za-z0-9_]*))?\s*;/m', $contents, $matches)) {
+            return '';
+        }
+
+        return !empty($matches[1]) ? $matches[1] : 'Action';
     }
 }

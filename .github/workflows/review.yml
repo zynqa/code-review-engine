@@ -152,6 +152,7 @@ jobs:
         with:
           github-token: ${{ github.token }}
           script: |
+            const fs = require('fs');
             const files = await github.paginate(github.rest.pulls.listFiles, {
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -159,12 +160,24 @@ jobs:
               per_page: 100,
             });
 
+            let isStandaloneModuleRepo = false;
+            if (fs.existsSync('composer.json') && !fs.existsSync('app/etc/config.php')) {
+              try {
+                const composerJson = JSON.parse(fs.readFileSync('composer.json', 'utf8'));
+                isStandaloneModuleRepo = composerJson.type === 'magento2-module';
+              } catch (error) {
+                core.warning(`Could not parse composer.json to detect repository type: ${error.message}`);
+              }
+            }
+
             const eligibleStatuses = new Set(['added', 'modified', 'renamed', 'copied', 'changed']);
             const phpcsFiles = files
               .filter((file) => eligibleStatuses.has(file.status))
               .map((file) => file.filename)
               .filter((filename) => /\.(php|phtml)$/i.test(filename));
-            const phpFiles = phpcsFiles
+            const phpFiles = isStandaloneModuleRepo
+              ? []
+              : phpcsFiles
               .filter((filename) => /\.php$/i.test(filename))
               .filter((filename) => filename !== 'app/etc/config.php')
               .filter((filename) => !/\/registration\.php$/i.test(filename));
@@ -174,9 +187,13 @@ jobs:
             core.setOutput('php_paths', phpFiles.join(' '));
             core.setOutput('php_paths_csv', phpFiles.join(','));
             core.setOutput('php_count', String(phpFiles.length));
+            core.setOutput('is_standalone_module_repo', isStandaloneModuleRepo ? 'true' : 'false');
 
             console.log(`PHPCS targets: ${phpcsFiles.length}`);
             console.log(`PHPStan/PHPMD targets: ${phpFiles.length}`);
+            if (isStandaloneModuleRepo) {
+              console.log('Detected standalone Magento module repository. PHPStan and PHPMD are skipped because the workflow does not install a full Magento dependency graph for these repos.');
+            }
 
       - name: Checkout review engine
         if: steps.changed-files.outputs.phpcs_count != '0' || steps.changed-files.outputs.php_count != '0'
