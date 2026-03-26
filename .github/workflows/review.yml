@@ -503,11 +503,12 @@ jobs:
               console.log('PR branch is already up to date with the base branch.');
             }
 
-            const pullRequestData = await github.graphql(`
+            const fetchPullRequest = async () => github.graphql(`
               query($owner: String!, $repo: String!, $number: Int!) {
                 repository(owner: $owner, name: $repo) {
                   pullRequest(number: $number) {
                     id
+                    mergeStateStatus
                     autoMergeRequest {
                       enabledAt
                     }
@@ -520,7 +521,7 @@ jobs:
               number: context.payload.pull_request.number,
             });
 
-            const pullRequest = pullRequestData.repository.pullRequest;
+            let pullRequest = (await fetchPullRequest()).repository.pullRequest;
             const enableAutoMerge = async () => github.graphql(`
               mutation($pullRequestId: ID!, $mergeMethod: PullRequestMergeMethod!) {
                 enablePullRequestAutoMerge(input: {
@@ -537,14 +538,33 @@ jobs:
               mergeMethod: mergeMethod.toUpperCase(),
             });
 
+            const waitForStablePullRequest = async () => {
+              let latest = pullRequest;
+              for (let attempt = 1; attempt <= 6; attempt++) {
+                latest = (await fetchPullRequest()).repository.pullRequest;
+                if (latest.mergeStateStatus !== 'UNSTABLE') {
+                  return latest;
+                }
+
+                console.log(`PR is still unstable after branch update (attempt ${attempt}/6). Waiting 10s...`);
+                await new Promise((resolve) => setTimeout(resolve, 10000));
+              }
+
+              return latest;
+            };
+
+            const tryDirectMerge = async () => {
+              await github.rest.pulls.merge({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.payload.pull_request.number,
+                merge_method: mergeMethod,
+              });
+            };
+
             if (!branchUpdated) {
               try {
-                await github.rest.pulls.merge({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  pull_number: context.payload.pull_request.number,
-                  merge_method: mergeMethod,
-                });
+                await tryDirectMerge();
                 console.log('Pull request merged directly.');
                 return;
               } catch (error) {
@@ -561,7 +581,27 @@ jobs:
                 console.log(`Direct merge is blocked (${message}). Falling back to native auto-merge.`);
               }
             } else {
-              console.log('PR branch was updated from the base branch. Enabling native auto-merge on the refreshed head instead of merging immediately.');
+              console.log('PR branch was updated from the base branch. Waiting for the refreshed head before trying to merge.');
+              pullRequest = await waitForStablePullRequest();
+
+              try {
+                await tryDirectMerge();
+                console.log('Pull request merged directly after branch update.');
+                return;
+              } catch (error) {
+                const message = String(error.message || error);
+                const shouldFallbackToAutoMerge =
+                  error.status === 405 ||
+                  message.includes('protected ref') ||
+                  message.includes('Repository rule violations found') ||
+                  message.includes('Head branch was modified');
+
+                if (!shouldFallbackToAutoMerge) {
+                  throw error;
+                }
+
+                console.log(`Direct merge after branch update is blocked (${message}). Falling back to native auto-merge.`);
+              }
             }
 
             if (!pullRequest.autoMergeRequest) {
