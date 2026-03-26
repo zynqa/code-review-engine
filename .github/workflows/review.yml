@@ -482,12 +482,14 @@ jobs:
               }
             }
 
+            let branchUpdated = false;
             try {
               await github.rest.pulls.updateBranch({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: context.payload.pull_request.number,
               });
+              branchUpdated = true;
             } catch (error) {
               if (error.status !== 422 || !String(error.message).includes('There are no new commits on the base branch')) {
                 throw error;
@@ -529,27 +531,31 @@ jobs:
               mergeMethod: mergeMethod.toUpperCase(),
             });
 
-            try {
-              await github.rest.pulls.merge({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: context.payload.pull_request.number,
-                merge_method: mergeMethod,
-              });
-              console.log('Pull request merged directly.');
-              return;
-            } catch (error) {
-              const message = String(error.message || error);
-              const shouldFallbackToAutoMerge =
-                error.status === 405 ||
-                message.includes('protected ref') ||
-                message.includes('Repository rule violations found');
+            if (!branchUpdated) {
+              try {
+                await github.rest.pulls.merge({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: context.payload.pull_request.number,
+                  merge_method: mergeMethod,
+                });
+                console.log('Pull request merged directly.');
+                return;
+              } catch (error) {
+                const message = String(error.message || error);
+                const shouldFallbackToAutoMerge =
+                  error.status === 405 ||
+                  message.includes('protected ref') ||
+                  message.includes('Repository rule violations found');
 
-              if (!shouldFallbackToAutoMerge) {
-                throw error;
+                if (!shouldFallbackToAutoMerge) {
+                  throw error;
+                }
+
+                console.log(`Direct merge is blocked (${message}). Falling back to native auto-merge.`);
               }
-
-              console.log(`Direct merge is blocked (${message}). Falling back to native auto-merge.`);
+            } else {
+              console.log('PR branch was updated from the base branch. Enabling native auto-merge on the refreshed head instead of merging immediately.');
             }
 
             if (!pullRequest.autoMergeRequest) {
