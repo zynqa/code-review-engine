@@ -5,7 +5,20 @@ const prTitle = process.env.PR_TITLE || '';
 const prBody = process.env.PR_BODY || '';
 const headRef = process.env.GITHUB_HEAD_REF || '';
 const projectKey = (process.env.JIRA_PROJECT_KEY || '').toUpperCase();
+const allowedProjectKeys = (process.env.ALLOWED_JIRA_PROJECT_KEYS || '')
+  .split(',')
+  .map((key) => key.trim().toUpperCase())
+  .filter(Boolean);
 const jiraBaseUrl = (process.env.JIRA_BASE_URL || '').replace(/\/+$/, '');
+
+function getAllowedProjectKeys() {
+  const keys = [...allowedProjectKeys];
+  if (projectKey && !keys.includes(projectKey)) {
+    keys.unshift(projectKey);
+  }
+
+  return [...new Set(keys)];
+}
 
 async function githubRequest(url, options = {}) {
   const response = await fetch(url, {
@@ -54,7 +67,19 @@ async function paginate(url) {
 }
 
 function getProjectPattern() {
-  return projectKey || '[A-Z][A-Z0-9]{1,9}';
+  const keys = getAllowedProjectKeys();
+  if (keys.length === 0) {
+    return '[A-Z][A-Z0-9]{1,9}';
+  }
+
+  return keys
+    .map((key) => key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|');
+}
+
+function getDisplayKeyExample() {
+  const keys = getAllowedProjectKeys();
+  return keys.length > 0 ? keys.join(' or ') : 'PROJ';
 }
 
 function extractTicket(source) {
@@ -68,7 +93,7 @@ function validateTitle() {
   if (!regex.test(prTitle)) {
     return {
       ok: false,
-      message: `PR title must match "${projectKey || 'PROJ'}-123: Summary".`,
+      message: `PR title must match "${getDisplayKeyExample()}-123: Summary".`,
     };
   }
 
@@ -211,7 +236,7 @@ async function main() {
     failures.push(commitValidation.message);
   }
 
-  await upsertSummary(expectedTicket || projectKey || 'Unknown', failures);
+  await upsertSummary(expectedTicket || getAllowedProjectKeys()[0] || 'Unknown', failures);
 
   if (failures.length === 0) {
     console.log('PR convention validation passed.');

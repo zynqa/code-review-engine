@@ -18,6 +18,11 @@ on:
         required: false
         default: ''
         type: string
+      allowed-jira-project-keys:
+        description: 'Comma-separated Jira project keys accepted by PR validation (e.g. DPT,ESHOP3)'
+        required: false
+        default: ''
+        type: string
       enable-pr-validation:
         description: 'Enable PR title, branch, description, and commit message validation'
         required: false
@@ -95,6 +100,7 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           GITHUB_HEAD_REF: ${{ github.head_ref }}
           JIRA_PROJECT_KEY: ${{ inputs.jira-project-key }}
+          ALLOWED_JIRA_PROJECT_KEYS: ${{ inputs.allowed-jira-project-keys }}
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
         run: node .code-review-engine/actions/claude-reviewer/src/pr-validation-check.js
 
