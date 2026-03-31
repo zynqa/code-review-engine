@@ -619,8 +619,10 @@ jobs:
                 const message = String(error.message || error);
                 const shouldFallbackToAutoMerge =
                   error.status === 405 ||
+                  error.status === 409 ||
                   message.includes('protected ref') ||
-                  message.includes('Repository rule violations found');
+                  message.includes('Repository rule violations found') ||
+                  message.includes('Head branch is out of date');
 
                 if (!shouldFallbackToAutoMerge) {
                   throw error;
@@ -640,9 +642,11 @@ jobs:
                 const message = String(error.message || error);
                 const shouldFallbackToAutoMerge =
                   error.status === 405 ||
+                  error.status === 409 ||
                   message.includes('protected ref') ||
                   message.includes('Repository rule violations found') ||
-                  message.includes('Head branch was modified');
+                  message.includes('Head branch was modified') ||
+                  message.includes('Head branch is out of date');
 
                 if (!shouldFallbackToAutoMerge) {
                   throw error;
