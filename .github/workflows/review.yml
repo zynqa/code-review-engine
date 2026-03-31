@@ -461,17 +461,19 @@ jobs:
               repo: context.repo.repo,
             });
 
-            const mergeMethod = repository.allow_squash_merge
-              ? 'squash'
-              : repository.allow_merge_commit
-                ? 'merge'
-                : repository.allow_rebase_merge
-                  ? 'rebase'
-                  : null;
+            const mergeMethods = [
+              repository.allow_merge_commit ? 'merge' : null,
+              repository.allow_squash_merge ? 'squash' : null,
+              repository.allow_rebase_merge ? 'rebase' : null,
+            ].filter(Boolean);
 
-            if (!mergeMethod) {
+            if (mergeMethods.length === 0) {
               throw new Error('No merge methods are enabled for this repository.');
             }
+
+            const isMergeMethodRejected = (message) =>
+              message.includes('merging is not allowed on this repository') ||
+              message.includes('Merge method');
 
             if (${{ inputs.enable-auto-approval }}) {
               const { data: reviews } = await github.rest.pulls.listReviews({
@@ -534,21 +536,39 @@ jobs:
             });
 
             let pullRequest = (await fetchPullRequest()).repository.pullRequest;
-            const enableAutoMerge = async () => github.graphql(`
-              mutation($pullRequestId: ID!, $mergeMethod: PullRequestMergeMethod!) {
-                enablePullRequestAutoMerge(input: {
-                  pullRequestId: $pullRequestId
-                  mergeMethod: $mergeMethod
-                }) {
-                  pullRequest {
-                    number
+            const enableAutoMerge = async () => {
+              let lastError = null;
+              for (const mergeMethod of mergeMethods) {
+                try {
+                  await github.graphql(`
+                    mutation($pullRequestId: ID!, $mergeMethod: PullRequestMergeMethod!) {
+                      enablePullRequestAutoMerge(input: {
+                        pullRequestId: $pullRequestId
+                        mergeMethod: $mergeMethod
+                      }) {
+                        pullRequest {
+                          number
+                        }
+                      }
+                    }
+                  `, {
+                    pullRequestId: pullRequest.id,
+                    mergeMethod: mergeMethod.toUpperCase(),
+                  });
+                  return;
+                } catch (error) {
+                  const message = String(error.message || error);
+                  if (!isMergeMethodRejected(message)) {
+                    throw error;
                   }
+
+                  lastError = error;
+                  console.log(`Auto-merge rejected method "${mergeMethod}". Trying next allowed method.`);
                 }
               }
-            `, {
-              pullRequestId: pullRequest.id,
-              mergeMethod: mergeMethod.toUpperCase(),
-            });
+
+              throw lastError;
+            };
 
             const waitForStablePullRequest = async () => {
               let latest = pullRequest;
@@ -566,12 +586,28 @@ jobs:
             };
 
             const tryDirectMerge = async () => {
-              await github.rest.pulls.merge({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: context.payload.pull_request.number,
-                merge_method: mergeMethod,
-              });
+              let lastError = null;
+              for (const mergeMethod of mergeMethods) {
+                try {
+                  await github.rest.pulls.merge({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: context.payload.pull_request.number,
+                    merge_method: mergeMethod,
+                  });
+                  return;
+                } catch (error) {
+                  const message = String(error.message || error);
+                  if (!isMergeMethodRejected(message)) {
+                    throw error;
+                  }
+
+                  lastError = error;
+                  console.log(`Direct merge rejected method "${mergeMethod}". Trying next allowed method.`);
+                }
+              }
+
+              throw lastError;
             };
 
             if (!branchUpdated) {
