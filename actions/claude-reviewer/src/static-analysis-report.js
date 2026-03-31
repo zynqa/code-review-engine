@@ -198,6 +198,105 @@ async function githubRequest(url, options = {}) {
   return response.json();
 }
 
+async function paginate(url) {
+  const items = [];
+  let nextUrl = url;
+
+  while (nextUrl) {
+    const response = await fetch(nextUrl, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`GitHub API ${response.status}: ${body}`);
+    }
+
+    items.push(...(await response.json()));
+    const link = response.headers.get('link') || '';
+    const match = link.match(/<([^>]+)>;\s*rel="next"/);
+    nextUrl = match ? match[1] : null;
+  }
+
+  return items;
+}
+
+function parseChangedLinesFromPatch(patch) {
+  const changedLines = new Set();
+  if (!patch) {
+    return changedLines;
+  }
+
+  const lines = patch.split('\n');
+  let newLine = 0;
+
+  for (const line of lines) {
+    const hunkMatch = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+    if (hunkMatch) {
+      newLine = Number(hunkMatch[1]);
+      continue;
+    }
+
+    if (line.startsWith('+++') || line.startsWith('---')) {
+      continue;
+    }
+
+    if (line.startsWith('+')) {
+      changedLines.add(newLine);
+      newLine += 1;
+      continue;
+    }
+
+    if (line.startsWith('-')) {
+      continue;
+    }
+
+    newLine += 1;
+  }
+
+  return changedLines;
+}
+
+async function fetchChangedLinesByPath() {
+  const owner = process.env.REPO_OWNER;
+  const repo = process.env.REPO_NAME;
+  const pullNumber = process.env.PR_NUMBER;
+  const files = await paginate(
+    `https://api.github.com/repos/${owner}/${repo}/pulls/${pullNumber}/files?per_page=100`
+  );
+
+  const changedLinesByPath = new Map();
+  for (const file of files) {
+    const normalizedPath = normalizePath(file.filename);
+    if (!normalizedPath) {
+      continue;
+    }
+
+    changedLinesByPath.set(normalizedPath, parseChangedLinesFromPatch(file.patch || ''));
+  }
+
+  return changedLinesByPath;
+}
+
+function filterFindingsToChangedLines(findings, changedLinesByPath) {
+  return findings.filter((finding) => {
+    const changedLines = changedLinesByPath.get(finding.path);
+    if (!changedLines) {
+      return false;
+    }
+
+    if (changedLines.size === 0) {
+      return false;
+    }
+
+    return changedLines.has(finding.line);
+  });
+}
+
 async function upsertSummaryComment(body) {
   const owner = process.env.REPO_OWNER;
   const repo = process.env.REPO_NAME;
@@ -316,11 +415,12 @@ function setOutput(name, value) {
 
 async function main() {
   const reportsDir = process.env.STATIC_REPORTS_DIR || process.cwd();
-  const findings = dedupeFindings([
+  const changedLinesByPath = await fetchChangedLinesByPath();
+  const findings = filterFindingsToChangedLines(dedupeFindings([
     ...parsePhpcs(path.join(reportsDir, 'phpcs-report.json')),
     ...parsePhpstan(path.join(reportsDir, 'phpstan-report.json')),
     ...parsePhpmd(path.join(reportsDir, 'phpmd-report.xml')),
-  ]).filter((finding) => finding.path && finding.line);
+  ]).filter((finding) => finding.path && finding.line), changedLinesByPath);
 
   findings.forEach(emitAnnotation);
   const inlineCommentsPosted = await postInlineComments(findings);
