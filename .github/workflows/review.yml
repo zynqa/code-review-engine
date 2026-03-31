@@ -299,12 +299,24 @@ jobs:
             exit 1
           fi
 
-          for code in \
-            "${{ steps.phpcs.outputs.exit_code }}" \
-            "${{ steps.phpstan.outputs.exit_code }}" \
-            "${{ steps.phpmd.outputs.exit_code }}"; do
-            if [ -n "$code" ] && [ "$code" != "0" ]; then
-              echo "Static analysis tool exited with code $code."
+          for tool in phpcs phpstan phpmd; do
+            case "$tool" in
+              phpcs)
+                code="${{ steps.phpcs.outputs.exit_code }}"
+                report="phpcs-report.json"
+                ;;
+              phpstan)
+                code="${{ steps.phpstan.outputs.exit_code }}"
+                report="phpstan-report.json"
+                ;;
+              phpmd)
+                code="${{ steps.phpmd.outputs.exit_code }}"
+                report="phpmd-report.xml"
+                ;;
+            esac
+
+            if [ -n "$code" ] && [ "$code" != "0" ] && [ ! -s "$report" ]; then
+              echo "Static analysis tool $tool exited with code $code and did not produce a report."
               exit 1
             fi
           done
