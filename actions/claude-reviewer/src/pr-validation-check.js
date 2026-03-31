@@ -77,19 +77,23 @@ function getProjectPattern() {
     .join('|');
 }
 
+function getTicketPattern() {
+  return `(?:${getProjectPattern()})-\\d+`;
+}
+
 function getDisplayKeyExample() {
   const keys = getAllowedProjectKeys();
   return keys.length > 0 ? keys.join(' or ') : 'PROJ';
 }
 
 function extractTicket(source) {
-  const regex = new RegExp(`(${getProjectPattern()}-\\d+)`, 'i');
+  const regex = new RegExp(`(${getTicketPattern()})`, 'i');
   const match = source.match(regex);
   return match ? match[1].toUpperCase() : null;
 }
 
 function validateTitle() {
-  const regex = new RegExp(`^(${getProjectPattern()}-\\d+):\\s+.+`);
+  const regex = new RegExp(`^(${getTicketPattern()}):\\s+.+`);
   if (!regex.test(prTitle)) {
     return {
       ok: false,
