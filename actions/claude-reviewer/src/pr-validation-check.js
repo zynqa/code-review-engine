@@ -149,6 +149,7 @@ function validateCommitMessages(commits, expectedTicket) {
     return { ok: false, message: 'Could not determine Jira ticket from the PR title.' };
   }
 
+  const commitPattern = new RegExp(`^${expectedTicket}(?::\\s+|\\s+).+`);
   const failures = [];
 
   for (const commit of commits) {
@@ -157,7 +158,7 @@ function validateCommitMessages(commits, expectedTicket) {
       continue;
     }
 
-    if (!new RegExp(`^${expectedTicket}:\\s+.+`).test(message)) {
+    if (!commitPattern.test(message)) {
       failures.push(message);
     }
   }
@@ -168,7 +169,7 @@ function validateCommitMessages(commits, expectedTicket) {
 
   return {
     ok: false,
-    message: `Commit subjects must start with "${expectedTicket}: ". Invalid commits: ${failures.join(' | ')}`,
+    message: `Commit subjects must start with "${expectedTicket}" or "${expectedTicket}: ". Invalid commits: ${failures.join(' | ')}`,
   };
 }
 
