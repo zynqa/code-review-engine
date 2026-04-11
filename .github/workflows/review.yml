@@ -226,6 +226,21 @@ jobs:
             "magento/magento-coding-standard:^26" \
             --no-interaction --no-progress
 
+      - name: Install project dependencies for static analysis
+        if: steps.changed-files.outputs.php_count != '0' && steps.changed-files.outputs.is_standalone_module_repo != 'true'
+        run: |
+          if [ ! -f composer.json ] || [ ! -f composer.lock ]; then
+            echo "composer.json or composer.lock not found; skipping project dependency bootstrap."
+            exit 0
+          fi
+
+          composer install \
+            --no-interaction \
+            --no-progress \
+            --no-scripts \
+            --prefer-dist \
+            --ignore-platform-reqs
+
       - name: Register PHPCS standards
         if: steps.changed-files.outputs.phpcs_count != '0'
         run: |
@@ -252,7 +267,12 @@ jobs:
         if: steps.changed-files.outputs.php_count != '0'
         run: |
           set +e
-          phpstan analyse \
+          PHPSTAN_BIN="phpstan"
+          if [ -x vendor/bin/phpstan ]; then
+            PHPSTAN_BIN="vendor/bin/phpstan"
+          fi
+
+          "$PHPSTAN_BIN" analyse \
             --level=6 \
             --no-progress \
             --error-format=json \
@@ -266,7 +286,12 @@ jobs:
         if: steps.changed-files.outputs.php_count != '0'
         run: |
           set +e
-          phpmd "${{ steps.changed-files.outputs.php_paths_csv }}" xml \
+          PHPMD_BIN="phpmd"
+          if [ -x vendor/bin/phpmd ]; then
+            PHPMD_BIN="vendor/bin/phpmd"
+          fi
+
+          "$PHPMD_BIN" "${{ steps.changed-files.outputs.php_paths_csv }}" xml \
             cleancode,codesize,controversial,design,naming,unusedcode \
             --reportfile phpmd-report.xml
           exit_code=$?

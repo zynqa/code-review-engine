@@ -3,7 +3,9 @@ const path = require('path');
 
 function readJson(filePath) {
   if (!fs.existsSync(filePath)) return null;
-  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  const raw = fs.readFileSync(filePath, 'utf8').trim();
+  if (!raw) return null;
+  return JSON.parse(raw);
 }
 
 function readText(filePath) {
