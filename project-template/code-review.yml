@@ -12,6 +12,7 @@ jobs:
       strict-mode: false             # Set true for production-critical repos
       jira-project-key: "PROJ"       # Update to this project's Jira key
       allowed-jira-project-keys: ""  # Optional: comma-separated extra Jira keys accepted by PR validation
+      forbidden-content-patterns: "" # Optional: newline-separated "Label::regex" patterns checked on added PR lines
 
       # Layer toggles — enable only what this project has configured
       enable-pr-validation: false    # Enable to enforce Jira-linked title, branch, description, and commits
