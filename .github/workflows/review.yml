@@ -255,6 +255,7 @@ jobs:
       - name: Install analysis tools
         if: steps.changed-files.outputs.phpcs_count != '0' || steps.changed-files.outputs.php_count != '0'
         run: |
+          composer global config audit.block-insecure false
           composer global require \
             "squizlabs/php_codesniffer:^3.7" \
             "phpstan/phpstan:^1.10" \
