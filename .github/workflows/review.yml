@@ -217,12 +217,22 @@ jobs:
               .filter((file) => eligibleStatuses.has(file.status))
               .map((file) => file.filename)
               .filter((filename) => /\.(php|phtml)$/i.test(filename));
+            const isRuntimeAnalysisTarget = (filename) => {
+              if (!/\.php$/i.test(filename)) {
+                return false;
+              }
+
+              const normalized = filename.replace(/\\/g, '/');
+              const basename = normalized.split('/').pop().toLowerCase();
+              return normalized !== 'app/etc/config.php' &&
+                !/\/registration\.php$/i.test(normalized) &&
+                basename !== 'deploy.php' &&
+                basename !== 'deployer.php';
+            };
             const phpFiles = isStandaloneModuleRepo
               ? []
               : phpcsFiles
-              .filter((filename) => /\.php$/i.test(filename))
-              .filter((filename) => filename !== 'app/etc/config.php')
-              .filter((filename) => !/\/registration\.php$/i.test(filename));
+              .filter(isRuntimeAnalysisTarget);
 
             core.setOutput('phpcs_paths', phpcsFiles.join(' '));
             core.setOutput('phpcs_count', String(phpcsFiles.length));
