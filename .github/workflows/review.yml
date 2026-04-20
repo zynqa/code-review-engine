@@ -84,16 +84,16 @@ jobs:
 
     steps:
       - name: Checkout review engine
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: zynqa/code-review-engine
           ref: main
           path: .code-review-engine
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Validate PR conventions
         env:
@@ -119,19 +119,19 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Checkout review engine
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: zynqa/code-review-engine
           ref: main
           path: .code-review-engine
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Validate module registration
         env:
@@ -153,16 +153,16 @@ jobs:
 
     steps:
       - name: Checkout review engine
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: zynqa/code-review-engine
           ref: main
           path: .code-review-engine
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Validate content policy
         env:
@@ -186,11 +186,11 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Collect changed files
         id: changed-files
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           github-token: ${{ github.token }}
           script: |
@@ -239,7 +239,7 @@ jobs:
 
       - name: Checkout review engine
         if: steps.changed-files.outputs.phpcs_count != '0' || steps.changed-files.outputs.php_count != '0'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: zynqa/code-review-engine
           ref: main
@@ -337,9 +337,9 @@ jobs:
 
       - name: Setup Node.js
         if: always() && (steps.changed-files.outputs.phpcs_count != '0' || steps.changed-files.outputs.php_count != '0')
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Publish static-analysis findings
         id: static-report
@@ -408,21 +408,21 @@ jobs:
           fi
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Checkout review engine
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: zynqa/code-review-engine
           ref: main
           path: .code-review-engine
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Install reviewer dependencies
         working-directory: .code-review-engine/actions/claude-reviewer
@@ -464,7 +464,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -518,7 +518,7 @@ jobs:
 
     steps:
       - name: Enable auto-merge
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           github-token: ${{ github.token }}
           script: |
