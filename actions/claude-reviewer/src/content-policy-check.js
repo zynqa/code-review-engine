@@ -2,6 +2,30 @@ const owner = process.env.REPO_OWNER;
 const repo = process.env.REPO_NAME;
 const pullNumber = process.env.PR_NUMBER;
 const rawPatterns = process.env.FORBIDDEN_CONTENT_PATTERNS || '';
+const rawAllowedTerms = process.env.CONTENT_POLICY_ALLOWED_TERMS || '';
+
+const defaultAllowedPossessiveTerms = [
+  'Adobe',
+  'Amasty',
+  'Brippo',
+  'Composer',
+  'Deployer',
+  'GitHub',
+  'Google',
+  'Magento',
+  'Microsoft',
+  'PayPal',
+  'PHPCS',
+  'PHPMD',
+  'PHPStan',
+  'PHPUnit',
+  'Playwright',
+  'Redis',
+  'Stripe',
+  'Varnish',
+  'Webpack',
+  'Zynqa',
+];
 
 function escapeAnnotationValue(value) {
   return String(value)
@@ -25,6 +49,51 @@ function parsePatterns() {
         regex: new RegExp(expression, 'g'),
       };
     });
+}
+
+function parseAllowedTerms() {
+  return new Set(
+    [
+      ...defaultAllowedPossessiveTerms,
+      ...rawAllowedTerms.split(/[\r\n,]+/),
+    ]
+      .map((term) => term.trim().toLowerCase())
+      .filter(Boolean)
+  );
+}
+
+function isPersonalNamePolicy(pattern) {
+  return /personal[-\s]?name/i.test(pattern.label);
+}
+
+function isAllowedPossessiveMatch(pattern, matchText, allowedTerms) {
+  if (!isPersonalNamePolicy(pattern)) {
+    return false;
+  }
+
+  const match = /^([A-Z][A-Za-z0-9_-]*)['’]s$/.exec(matchText);
+  if (!match) {
+    return false;
+  }
+
+  return allowedTerms.has(match[1].toLowerCase());
+}
+
+function hasBlockingMatch(content, pattern, allowedTerms) {
+  pattern.regex.lastIndex = 0;
+  let match;
+
+  while ((match = pattern.regex.exec(content)) !== null) {
+    if (!isAllowedPossessiveMatch(pattern, match[0], allowedTerms)) {
+      return true;
+    }
+
+    if (match[0] === '') {
+      pattern.regex.lastIndex += 1;
+    }
+  }
+
+  return false;
 }
 
 async function paginate(url) {
@@ -73,7 +142,7 @@ async function githubRequest(url, options = {}) {
   return response.json();
 }
 
-function parsePatchFindings(file, patterns) {
+function parsePatchFindings(file, patterns, allowedTerms) {
   if (!file.patch) {
     return [];
   }
@@ -92,8 +161,7 @@ function parsePatchFindings(file, patterns) {
     if (line.startsWith('+') && !line.startsWith('+++')) {
       const content = line.slice(1);
       for (const pattern of patterns) {
-        pattern.regex.lastIndex = 0;
-        if (!pattern.regex.test(content)) {
+        if (!hasBlockingMatch(content, pattern, allowedTerms)) {
           continue;
         }
 
@@ -164,6 +232,7 @@ See the line annotations for details.`;
 
 async function main() {
   const patterns = parsePatterns();
+  const allowedTerms = parseAllowedTerms();
   if (patterns.length === 0) {
     console.log('No content policy patterns configured.');
     return;
@@ -172,7 +241,7 @@ async function main() {
   const files = await paginate(
     `https://api.github.com/repos/${owner}/${repo}/pulls/${pullNumber}/files?per_page=100`
   );
-  const findings = files.flatMap((file) => parsePatchFindings(file, patterns));
+  const findings = files.flatMap((file) => parsePatchFindings(file, patterns, allowedTerms));
 
   findings.forEach(emitAnnotation);
   await upsertSummary(findings);

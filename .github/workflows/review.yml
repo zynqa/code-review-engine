@@ -33,6 +33,11 @@ on:
         required: false
         default: ''
         type: string
+      content-policy-allowed-terms:
+        description: 'Optional comma- or newline-separated terms ignored by content policy checks, useful for vendor/tool/module names'
+        required: false
+        default: ''
+        type: string
       enable-auto-approval:
         description: 'Allow the workflow to submit an approval review before merging'
         required: false
@@ -171,6 +176,7 @@ jobs:
           REPO_NAME: ${{ github.event.repository.name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           FORBIDDEN_CONTENT_PATTERNS: ${{ inputs.forbidden-content-patterns }}
+          CONTENT_POLICY_ALLOWED_TERMS: ${{ inputs.content-policy-allowed-terms }}
         run: node .code-review-engine/actions/claude-reviewer/src/content-policy-check.js
 
   # ─────────────────────────────────────────
