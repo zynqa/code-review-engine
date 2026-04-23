@@ -4,6 +4,12 @@ declare(strict_types=1);
 
 class Zynqa_Sniffs_Files_ObjectManagerUsageSniff implements PHP_CodeSniffer\Sniffs\Sniff
 {
+    private const TEST_PATH_SEGMENTS = [
+        '/test/',
+        '/tests/',
+        '/dev/tests/',
+    ];
+
     public function register()
     {
         return [T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_VARIABLE];
@@ -11,6 +17,10 @@ class Zynqa_Sniffs_Files_ObjectManagerUsageSniff implements PHP_CodeSniffer\Snif
 
     public function process(PHP_CodeSniffer\Files\File $phpcsFile, $stackPtr)
     {
+        if ($this->isTestFile($phpcsFile)) {
+            return;
+        }
+
         $tokens = $phpcsFile->getTokens();
         $content = ltrim($tokens[$stackPtr]['content'], '\\');
 
@@ -32,5 +42,19 @@ class Zynqa_Sniffs_Files_ObjectManagerUsageSniff implements PHP_CodeSniffer\Snif
             $stackPtr,
             'ObjectManagerUsage'
         );
+    }
+
+    private function isTestFile(PHP_CodeSniffer\Files\File $phpcsFile): bool
+    {
+        $normalizedPath = str_replace('\\', '/', $phpcsFile->getFilename());
+        $lowerPath = strtolower($normalizedPath);
+
+        foreach (self::TEST_PATH_SEGMENTS as $segment) {
+            if (strpos($lowerPath, $segment) !== false) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
