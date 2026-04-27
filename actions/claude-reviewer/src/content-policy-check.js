@@ -22,6 +22,7 @@ const defaultAllowedPossessiveTerms = [
   'Playwright',
   'Redis',
   'Stripe',
+  'Toolkit',
   'Varnish',
   'Webpack',
   'Zynqa',
