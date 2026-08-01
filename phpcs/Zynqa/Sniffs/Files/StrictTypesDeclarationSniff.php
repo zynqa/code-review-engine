@@ -2,14 +2,19 @@
 
 declare(strict_types=1);
 
-class Zynqa_Sniffs_Files_StrictTypesDeclarationSniff implements PHP_CodeSniffer\Sniffs\Sniff
+namespace Zynqa\Sniffs\Files;
+
+use PHP_CodeSniffer\Files\File;
+use PHP_CodeSniffer\Sniffs\Sniff;
+
+class StrictTypesDeclarationSniff implements Sniff
 {
     public function register()
     {
         return [T_OPEN_TAG];
     }
 
-    public function process(PHP_CodeSniffer\Files\File $phpcsFile, $stackPtr)
+    public function process(File $phpcsFile, $stackPtr)
     {
         $fileName = str_replace('\\', '/', $phpcsFile->getFilename());
         if (substr($fileName, -4) !== '.php') {

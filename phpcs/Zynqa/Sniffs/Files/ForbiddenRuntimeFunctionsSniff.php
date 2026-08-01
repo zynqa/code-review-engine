@@ -2,7 +2,12 @@
 
 declare(strict_types=1);
 
-class Zynqa_Sniffs_Files_ForbiddenRuntimeFunctionsSniff implements PHP_CodeSniffer\Sniffs\Sniff
+namespace Zynqa\Sniffs\Files;
+
+use PHP_CodeSniffer\Files\File;
+use PHP_CodeSniffer\Sniffs\Sniff;
+
+class ForbiddenRuntimeFunctionsSniff implements Sniff
 {
     /**
      * Public so a ruleset can override the list per stack. The defaults below are the
@@ -29,7 +34,7 @@ class Zynqa_Sniffs_Files_ForbiddenRuntimeFunctionsSniff implements PHP_CodeSniff
         return [T_STRING, T_EXIT, T_VARIABLE];
     }
 
-    public function process(PHP_CodeSniffer\Files\File $phpcsFile, $stackPtr)
+    public function process(File $phpcsFile, $stackPtr)
     {
         $tokens = $phpcsFile->getTokens();
         $token = $tokens[$stackPtr];

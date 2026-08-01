@@ -2,7 +2,12 @@
 
 declare(strict_types=1);
 
-class Zynqa_Sniffs_Files_ForbiddenGlobalAccessSniff implements PHP_CodeSniffer\Sniffs\Sniff
+namespace Zynqa\Sniffs\Files;
+
+use PHP_CodeSniffer\Files\File;
+use PHP_CodeSniffer\Sniffs\Sniff;
+
+class ForbiddenGlobalAccessSniff implements Sniff
 {
     /**
      * Public so a ruleset can override the list per stack. The defaults below are the
@@ -24,7 +29,7 @@ class Zynqa_Sniffs_Files_ForbiddenGlobalAccessSniff implements PHP_CodeSniffer\S
         return [T_VARIABLE, T_GLOBAL];
     }
 
-    public function process(PHP_CodeSniffer\Files\File $phpcsFile, $stackPtr)
+    public function process(File $phpcsFile, $stackPtr)
     {
         $tokens = $phpcsFile->getTokens();
         $content = $tokens[$stackPtr]['content'];

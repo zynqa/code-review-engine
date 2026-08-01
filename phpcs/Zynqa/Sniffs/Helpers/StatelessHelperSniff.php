@@ -2,14 +2,19 @@
 
 declare(strict_types=1);
 
-class Zynqa_Sniffs_Helpers_StatelessHelperSniff implements PHP_CodeSniffer\Sniffs\Sniff
+namespace Zynqa\Sniffs\Helpers;
+
+use PHP_CodeSniffer\Files\File;
+use PHP_CodeSniffer\Sniffs\Sniff;
+
+class StatelessHelperSniff implements Sniff
 {
     public function register()
     {
         return [T_CLASS];
     }
 
-    public function process(PHP_CodeSniffer\Files\File $phpcsFile, $stackPtr)
+    public function process(File $phpcsFile, $stackPtr)
     {
         $fileName = str_replace('\\', '/', $phpcsFile->getFilename());
         if (strpos($fileName, '/Helper/') === false) {
