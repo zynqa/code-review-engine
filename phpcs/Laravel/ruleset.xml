@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<ruleset name="Laravel">
+  <description>Zynqa PHPCS standard for Laravel and Filament projects: architecture rules only. Formatting is owned by Laravel Pint, which runs alongside this in the review workflow — do not add style sniffs here or the two tools will disagree.</description>
+
+  <!--
+    Deliberately excluded from the Magento standard, because they encode Magento concepts
+    that have no Laravel equivalent: StatelessHelper, AdminhtmlController, InstallSchemaUsage,
+    ObjectManagerUsage and NoInlinePresentation (the last is .phtml-specific; a Blade
+    equivalent would need its own sniff).
+  -->
+
+  <rule ref="Zynqa.Files.StrictTypesDeclaration" />
+
+  <rule ref="Zynqa.Files.ForbiddenGlobalAccess">
+    <properties>
+      <property name="forbiddenVariables" type="array">
+        <element key="$_GET" value="Use the Request object instead of reading from $_GET directly."/>
+        <element key="$_POST" value="Use the Request object instead of reading from $_POST directly."/>
+        <element key="$_REQUEST" value="Use the Request object instead of reading from $_REQUEST directly."/>
+        <element key="$_SERVER" value="Use the Request object or config() instead of reading from $_SERVER directly."/>
+        <element key="$_SESSION" value="Use the session() helper or Session facade instead of accessing $_SESSION directly."/>
+        <element key="$GLOBALS" value="Avoid accessing $GLOBALS directly."/>
+      </property>
+    </properties>
+  </rule>
+
+  <rule ref="Zynqa.Files.ForbiddenRuntimeFunctions">
+    <properties>
+      <property name="forbiddenFunctions" type="array">
+        <element key="dd" value="Do not leave dd() debugging calls in committed code."/>
+        <element key="dump" value="Do not leave dump() debugging calls in committed code."/>
+        <element key="ray" value="Do not leave ray() debugging calls in committed code."/>
+        <element key="var_dump" value="Do not leave var_dump() debugging calls in committed code."/>
+        <element key="print_r" value="Do not leave print_r() debugging calls in committed code."/>
+        <element key="eval" value="Do not execute dynamic PHP code with eval()."/>
+        <element key="error_log" value="Use the Log facade instead of error_log()."/>
+        <element key="mail" value="Use the Mail facade instead of mail()."/>
+        <element key="file_put_contents" value="Use the Storage facade instead of file_put_contents()."/>
+        <element key="session_start" value="Use the session() helper instead of calling session_start()."/>
+        <element key="ini_set" value="Do not mutate PHP runtime configuration from application code."/>
+        <element key="set_time_limit" value="Do not change script execution limits from application code."/>
+        <element key="sleep" value="Do not block execution with sleep() in production code."/>
+        <element key="utf8_encode" value="Avoid utf8_encode(); use framework-safe encoding handling instead."/>
+      </property>
+    </properties>
+  </rule>
+
+  <!--
+    env() is intentionally NOT forbidden here. Laravel's own config/ files must call it, and
+    the sniff has no path awareness, so a blanket ban would fire on correct code. Catching
+    env() outside config/ needs a path-aware sniff of its own.
+  -->
+</ruleset>

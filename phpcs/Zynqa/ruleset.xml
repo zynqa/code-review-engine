@@ -1,14 +1,6 @@
 <?xml version="1.0"?>
 <ruleset name="Zynqa">
-  <description>Zynqa PHPCS standard extending Magento with project-specific architecture rules.</description>
+  <description>Deprecated alias for the Magento standard. The standard was split per stack (Magento, Laravel) so Laravel repos are not measured against Magento rules. This alias keeps --standard=Zynqa working for anything still pointing at the old name; prefer --standard=Magento. The sniffs themselves still live under this directory and keep their Zynqa.* references.</description>
 
-  <rule ref="Magento2" />
-  <rule ref="Zynqa.Files.StrictTypesDeclaration" />
-  <rule ref="Zynqa.Helpers.StatelessHelper" />
-  <rule ref="Zynqa.Controllers.AdminhtmlController" />
-  <rule ref="Zynqa.Files.ForbiddenGlobalAccess" />
-  <rule ref="Zynqa.Files.ForbiddenRuntimeFunctions" />
-  <rule ref="Zynqa.Files.InstallSchemaUsage" />
-  <rule ref="Zynqa.Files.ObjectManagerUsage" />
-  <rule ref="Zynqa.Templates.NoInlinePresentation" />
+  <rule ref="Magento" />
 </ruleset>

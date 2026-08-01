@@ -4,7 +4,13 @@ declare(strict_types=1);
 
 class Zynqa_Sniffs_Files_ForbiddenGlobalAccessSniff implements PHP_CodeSniffer\Sniffs\Sniff
 {
-    private $forbiddenVariables = [
+    /**
+     * Public so a ruleset can override the list per stack. The defaults below are the
+     * Magento wording; phpcs/Laravel/ruleset.xml replaces them with Laravel equivalents.
+     *
+     * @var array<string, string>
+     */
+    public $forbiddenVariables = [
         '$_GET' => 'Use request abstractions instead of reading from $_GET directly.',
         '$_POST' => 'Use request abstractions instead of reading from $_POST directly.',
         '$_REQUEST' => 'Use request abstractions instead of reading from $_REQUEST directly.',

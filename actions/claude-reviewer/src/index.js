@@ -63,14 +63,29 @@ async function main() {
     }
   }
 
-  // 4. Load system prompt
+  // 4. Load the system prompt for this stack. The reviewer's expertise has to match the
+  // codebase: Magento rules applied to Laravel (and vice versa) produce confident nonsense.
+  // Unknown or absent values fall back to magento, which is what every existing caller gets.
+  const stack = (process.env.REVIEW_STACK || 'magento').toLowerCase();
+  const stackPrompts = {
+    magento: 'magento-system.md',
+    laravel: 'laravel-system.md',
+  };
+  const promptFile = stackPrompts[stack] || stackPrompts.magento;
+
+  if (!stackPrompts[stack]) {
+    console.log(`⚠️  Unknown stack "${stack}". Falling back to the Magento reviewer persona.`);
+  }
+
+  console.log(`🧭 Reviewing as a ${stack} expert (${promptFile}).`);
+
   const systemPrompt = fs.readFileSync(
-    path.join(process.env.PROMPTS_PATH, 'magento-system.md'),
+    path.join(process.env.PROMPTS_PATH, promptFile),
     'utf8'
   );
 
-  // 5. Run Claude review
-  console.log('🧠 Running Claude review...');
+  // 5. Run the AI review through the configured provider
+  console.log('🧠 Running AI review...');
   const review = await runClaudeReview({
     diff,
     files,
@@ -79,6 +94,7 @@ async function main() {
     slackContext,
     systemPrompt,
     config,
+    stack,
     magentoVersion: process.env.MAGENTO_VERSION,
     strictMode: process.env.STRICT_MODE === 'true',
   });

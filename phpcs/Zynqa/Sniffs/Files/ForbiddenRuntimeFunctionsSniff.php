@@ -4,7 +4,13 @@ declare(strict_types=1);
 
 class Zynqa_Sniffs_Files_ForbiddenRuntimeFunctionsSniff implements PHP_CodeSniffer\Sniffs\Sniff
 {
-    private $forbiddenFunctions = [
+    /**
+     * Public so a ruleset can override the list per stack. The defaults below are the
+     * Magento wording; phpcs/Laravel/ruleset.xml replaces them with Laravel equivalents.
+     *
+     * @var array<string, string>
+     */
+    public $forbiddenFunctions = [
         'error_log' => 'Use PSR-3 or Magento logging services instead of error_log().',
         'eval' => 'Do not execute dynamic PHP code with eval().',
         'file_put_contents' => 'Use Magento filesystem abstractions instead of file_put_contents().',

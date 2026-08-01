@@ -13,6 +13,7 @@ async function runClaudeReview({
   slackContext,
   systemPrompt,
   config,
+  stack,
   magentoVersion,
   strictMode,
 }) {
@@ -22,19 +23,42 @@ async function runClaudeReview({
     jiraContext,
     confluenceContext,
     slackContext,
+    stack,
     magentoVersion,
     strictMode,
     config,
   });
 
-  const response = await callClaudeAPI(systemPrompt, userMessage);
+  const response = await callProvider(systemPrompt, userMessage);
   return parseClaudeResponse(response, files, config);
 }
 
-function buildUserMessage({ diff, files, jiraContext, confluenceContext, slackContext, magentoVersion, strictMode, config }) {
+/**
+ * Dispatch to the configured AI backend.
+ *
+ * The engine is not tied to one vendor: AI_PROVIDER selects the implementation, and adding
+ * another means adding a branch here plus its API call. Anthropic is the default and the
+ * only one wired up so far.
+ */
+async function callProvider(systemPrompt, userMessage) {
+  const provider = (process.env.AI_PROVIDER || 'anthropic').toLowerCase();
+
+  switch (provider) {
+    case 'anthropic':
+      return callClaudeAPI(systemPrompt, userMessage);
+    default:
+      throw new Error(
+        `Unsupported AI_PROVIDER "${provider}". Supported providers: anthropic.`
+      );
+  }
+}
+
+function buildUserMessage({ diff, files, jiraContext, confluenceContext, slackContext, stack, magentoVersion, strictMode, config }) {
   let message = `## PR Information\n`;
   message += `- **Title:** ${process.env.PR_TITLE}\n`;
-  message += `- **Magento Version:** ${magentoVersion}\n`;
+  if ((stack || 'magento') === 'magento') {
+    message += `- **Magento Version:** ${magentoVersion}\n`;
+  }
   message += `- **Strict Mode:** ${strictMode}\n`;
   message += `- **Files Changed:** ${files.length}\n\n`;
 

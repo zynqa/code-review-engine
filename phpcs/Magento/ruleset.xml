@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<ruleset name="Magento">
+  <description>Zynqa PHPCS standard for Magento 2 projects and modules: the Magento coding standard plus Zynqa architecture rules.</description>
+
+  <rule ref="Magento2" />
+  <rule ref="Zynqa.Files.StrictTypesDeclaration" />
+  <rule ref="Zynqa.Helpers.StatelessHelper" />
+  <rule ref="Zynqa.Controllers.AdminhtmlController" />
+  <rule ref="Zynqa.Files.ForbiddenGlobalAccess" />
+  <rule ref="Zynqa.Files.ForbiddenRuntimeFunctions" />
+  <rule ref="Zynqa.Files.InstallSchemaUsage" />
+  <rule ref="Zynqa.Files.ObjectManagerUsage" />
+  <rule ref="Zynqa.Templates.NoInlinePresentation" />
+</ruleset>
