@@ -8,18 +8,21 @@ jobs:
   review:
     uses: zynqa/code-review-engine/.github/workflows/review.yml@main
     with:
-      magento-version: "2.4.7"       # Update to match this project
+      stack: "magento"               # magento or laravel — selects PHPCS standard, formatter, and AI persona
+      php-version: "8.2"             # PHP used for static analysis and tests
+      magento-version: "2.4.7"       # Update to match this project (ignored when stack is not magento)
       strict-mode: false             # Set true for production-critical repos
       jira-project-key: "PROJ"       # Update to this project's Jira key
       allowed-jira-project-keys: ""  # Optional: comma-separated extra Jira keys accepted by PR validation
       forbidden-content-patterns: "" # Optional: newline-separated "Label::regex" patterns checked on added PR lines
       content-policy-allowed-terms: "" # Optional: comma/newline-separated vendor, tool, or module names ignored by content policy
+      test-command: "vendor/bin/phpunit --testsuite unit" # Laravel repos typically use vendor/bin/pest
 
       # Layer toggles — enable only what this project has configured
       enable-pr-validation: false    # Enable to enforce Jira-linked title, branch, description, and commits
       enable-auto-approval: false    # Enable only if repo rules allow GitHub Actions to approve PRs
-      enable-module-registration: true # Disable only if this repo does not want Magento registration validation
+      enable-module-registration: true # Magento only — must be false for laravel repos
       enable-static-analysis: true   # No dependencies — always safe to enable
       enable-ai-review: true         # Requires ANTHROPIC_API_KEY org secret
-      enable-tests: false            # Enable once PHPUnit suite is set up
+      enable-tests: false            # Enable once the test suite is reliable in CI
     secrets: inherit

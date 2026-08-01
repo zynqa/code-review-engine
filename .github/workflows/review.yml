@@ -3,8 +3,18 @@ name: Claude Code Review
 on:
   workflow_call:
     inputs:
+      stack:
+        description: 'Technology stack under review: magento or laravel. Selects the PHPCS standard, the formatter, and the AI reviewer persona. Defaults to magento so existing callers are unaffected.'
+        required: false
+        default: 'magento'
+        type: string
+      php-version:
+        description: 'PHP version used for the static-analysis and test jobs'
+        required: false
+        default: '8.2'
+        type: string
       magento-version:
-        description: 'Magento version (e.g. 2.4.7)'
+        description: 'Magento version (e.g. 2.4.7). Ignored when stack is not magento.'
         required: false
         default: '2.4.7'
         type: string
@@ -63,6 +73,16 @@ on:
         required: false
         default: false
         type: boolean
+      test-command:
+        description: 'Command run by the tests job. Defaults to the Magento-style PHPUnit unit suite; Laravel repos typically pass a Pest command.'
+        required: false
+        default: 'vendor/bin/phpunit --testsuite unit'
+        type: string
+      ai-provider:
+        description: 'AI backend for the review job (e.g. anthropic). Reserved for when AI review is switched on; the reviewer resolves the provider from this value.'
+        required: false
+        default: 'anthropic'
+        type: string
     secrets:
       ANTHROPIC_API_KEY:
         required: false
@@ -269,19 +289,26 @@ jobs:
         if: steps.changed-files.outputs.phpcs_count != '0' || steps.changed-files.outputs.php_count != '0'
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.2'
+          php-version: ${{ inputs.php-version }}
           tools: composer
 
       - name: Install analysis tools
         if: steps.changed-files.outputs.phpcs_count != '0' || steps.changed-files.outputs.php_count != '0'
         run: |
           composer global config audit.block-insecure false
-          composer global require \
+
+          # The Magento coding standard is only meaningful for the magento stack, and it is a
+          # heavy dependency, so Laravel repos do not pull it.
+          packages=( \
             "squizlabs/php_codesniffer:^3.7" \
             "phpstan/phpstan:^1.10" \
             "phpmd/phpmd:^2.14" \
-            "magento/magento-coding-standard:^26" \
-            --no-interaction --no-progress
+          )
+          if [ "${{ inputs.stack }}" = "magento" ]; then
+            packages+=("magento/magento-coding-standard:^26")
+          fi
+
+          composer global require "${packages[@]}" --no-interaction --no-progress
 
       - name: Install project dependencies for static analysis
         if: steps.changed-files.outputs.php_count != '0' && steps.changed-files.outputs.is_standalone_module_repo != 'true'
@@ -302,19 +329,53 @@ jobs:
         if: steps.changed-files.outputs.phpcs_count != '0'
         run: |
           COMPOSER_HOME="$(composer global config home)"
-          phpcs --config-set installed_paths "${COMPOSER_HOME}/vendor/magento/magento-coding-standard,${COMPOSER_HOME}/vendor/phpcompatibility/php-compatibility,${GITHUB_WORKSPACE}/.code-review-engine/phpcs"
+          paths="${GITHUB_WORKSPACE}/.code-review-engine/phpcs"
+
+          # Only the magento stack installs (and can therefore register) these.
+          if [ "${{ inputs.stack }}" = "magento" ]; then
+            paths="${COMPOSER_HOME}/vendor/magento/magento-coding-standard,${COMPOSER_HOME}/vendor/phpcompatibility/php-compatibility,${paths}"
+          fi
+
+          phpcs --config-set installed_paths "$paths"
           phpcs -i
 
-      - name: PHP_CodeSniffer — Magento Coding Standard
+      - name: PHP_CodeSniffer
         id: phpcs
         if: steps.changed-files.outputs.phpcs_count != '0'
         run: |
           set +e
-          phpcs --standard=Zynqa \
-                --extensions=php,phtml \
+          if [ "${{ inputs.stack }}" = "laravel" ]; then
+            standard="Laravel"
+            extensions="php"
+          else
+            standard="Magento"
+            extensions="php,phtml"
+          fi
+
+          phpcs --standard="$standard" \
+                --extensions="$extensions" \
                 --report=json \
                 --report-file=phpcs-report.json \
                 ${{ steps.changed-files.outputs.phpcs_paths }}
+          exit_code=$?
+          echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Laravel Pint
+        id: pint
+        if: inputs.stack == 'laravel' && steps.changed-files.outputs.phpcs_count != '0'
+        run: |
+          set +e
+          # Prefer the project's own Pint so CI matches what developers run locally, and
+          # picks up the repo's pint.json preset. Fall back to a global install for repos
+          # that have not added it yet.
+          PINT_BIN="vendor/bin/pint"
+          if [ ! -x "$PINT_BIN" ]; then
+            composer global require "laravel/pint:^1.13" --no-interaction --no-progress
+            PINT_BIN="pint"
+          fi
+
+          "$PINT_BIN" --test ${{ steps.changed-files.outputs.phpcs_paths }}
           exit_code=$?
           echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
           exit 0
@@ -329,8 +390,27 @@ jobs:
             PHPSTAN_BIN="vendor/bin/phpstan"
           fi
 
+          # Laravel repos are analysed on their own terms: a project that has tuned its level
+          # or installed Larastan gets its own config instead of a hardcoded level.
+          #
+          # Magento keeps --level=6 unconditionally. PHPStan already auto-discovers a root
+          # phpstan.neon.dist, and consumers rely on --level=6 overriding the level in it —
+          # datapowertools ships one purely to silence autoloader cascades, because this
+          # workflow does not install a full Magento dependency graph. Passing
+          # --configuration there would drop the override and change what those repos report.
+          level_args=(--level=6)
+          if [ "${{ inputs.stack }}" = "laravel" ]; then
+            for config in phpstan.neon phpstan.neon.dist phpstan.dist.neon; do
+              if [ -f "$config" ]; then
+                level_args=(--configuration="$config")
+                echo "Using PHPStan configuration $config"
+                break
+              fi
+            done
+          fi
+
           "$PHPSTAN_BIN" analyse \
-            --level=6 \
+            "${level_args[@]}" \
             --no-progress \
             --error-format=json \
             ${{ steps.changed-files.outputs.php_paths }} > phpstan-report.json
@@ -338,9 +418,12 @@ jobs:
           echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
           exit 0
 
+      # PHPMD stays magento-only. Its default rulesets fire heavily on idiomatic Laravel
+      # (short closures, fluent builders, framework base classes), and Laravel repos are
+      # already covered by Pint for style and PHPStan for correctness.
       - name: PHP Mess Detector
         id: phpmd
-        if: steps.changed-files.outputs.php_count != '0'
+        if: inputs.stack != 'laravel' && steps.changed-files.outputs.php_count != '0'
         run: |
           set +e
           PHPMD_BIN="phpmd"
@@ -378,6 +461,14 @@ jobs:
         run: |
           if [ "${{ steps.static-report.outputs.has_findings }}" = "true" ]; then
             echo "Static analysis found ${{ steps.static-report.outputs.total_findings }} issue(s)."
+            exit 1
+          fi
+
+          # Pint reports by exit code rather than a report file, so it is checked on its own
+          # instead of going through the report loop below.
+          pint_code="${{ steps.pint.outputs.exit_code }}"
+          if [ -n "$pint_code" ] && [ "$pint_code" != "0" ]; then
+            echo "Laravel Pint found formatting issues. Run vendor/bin/pint locally and commit the result."
             exit 1
           fi
 
@@ -458,6 +549,8 @@ jobs:
           CONFLUENCE_BASE_URL: ${{ secrets.CONFLUENCE_BASE_URL }}
           SLACK_TOKEN: ${{ secrets.SLACK_TOKEN }}
           MAGENTO_VERSION: ${{ inputs.magento-version }}
+          REVIEW_STACK: ${{ inputs.stack }}
+          AI_PROVIDER: ${{ inputs.ai-provider }}
           STRICT_MODE: ${{ inputs.strict-mode }}
           JIRA_PROJECT_KEY: ${{ inputs.jira-project-key }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -489,14 +582,14 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.2'
+          php-version: ${{ inputs.php-version }}
           tools: composer
 
       - name: Install dependencies
         run: composer install --no-interaction --no-progress
 
-      - name: Run PHPUnit
-        run: vendor/bin/phpunit --testsuite unit
+      - name: Run tests
+        run: ${{ inputs.test-command }}
 
   # ─────────────────────────────────────────
   # Layer 4 — Auto-merge gate

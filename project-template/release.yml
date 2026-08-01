@@ -1,0 +1,97 @@
+name: Release on Merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  release:
+    if: >-
+      github.event.pull_request.merged == true &&
+      !contains(github.event.pull_request.labels.*.name, 'release:skip')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+      - name: Determine bump type from PR labels
+        id: bump
+        env:
+          LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          if echo "$LABELS" | grep -q '"release:major"'; then
+            echo "type=major" >> "$GITHUB_OUTPUT"
+          elif echo "$LABELS" | grep -q '"release:minor"'; then
+            echo "type=minor" >> "$GITHUB_OUTPUT"
+          else
+            echo "type=patch" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compute next version
+        id: version
+        run: |
+          latest=$(git tag --sort=-v:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)
+          if [ -z "$latest" ]; then
+            previous='0.0.0'
+            has_previous='false'
+          else
+            previous="$latest"
+            has_previous='true'
+          fi
+
+          IFS='.' read -r major minor patch <<< "$previous"
+          case "${{ steps.bump.outputs.type }}" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+          esac
+          next="${major}.${minor}.${patch}"
+
+          echo "previous=${previous}" >> "$GITHUB_OUTPUT"
+          echo "has_previous=${has_previous}" >> "$GITHUB_OUTPUT"
+          echo "next=${next}" >> "$GITHUB_OUTPUT"
+          echo "::notice::Bumping ${previous} -> ${next} (${{ steps.bump.outputs.type }})"
+
+      - name: Generate release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          args=(-X POST "repos/${{ github.repository }}/releases/generate-notes"
+            -f tag_name="${{ steps.version.outputs.next }}"
+            -f target_commitish=main)
+          if [ '${{ steps.version.outputs.has_previous }}' = 'true' ]; then
+            args+=(-f previous_tag_name="${{ steps.version.outputs.previous }}")
+          fi
+          gh api "${args[@]}" --jq .body > .release_notes.md
+          echo '--- generated release notes ---'
+          cat .release_notes.md
+
+      - name: Tag and push
+        run: |
+          version='${{ steps.version.outputs.next }}'
+          git tag -a "$version" -m "Release ${version}"
+          git push origin "$version"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version='${{ steps.version.outputs.next }}'
+          gh release create "$version" \
+            --target main \
+            --title "$version" \
+            --notes-file .release_notes.md

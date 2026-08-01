@@ -2,9 +2,20 @@
 
 declare(strict_types=1);
 
-class Zynqa_Sniffs_Files_ForbiddenGlobalAccessSniff implements PHP_CodeSniffer\Sniffs\Sniff
+namespace Zynqa\Sniffs\Files;
+
+use PHP_CodeSniffer\Files\File;
+use PHP_CodeSniffer\Sniffs\Sniff;
+
+class ForbiddenGlobalAccessSniff implements Sniff
 {
-    private $forbiddenVariables = [
+    /**
+     * Public so a ruleset can override the list per stack. The defaults below are the
+     * Magento wording; phpcs/Laravel/ruleset.xml replaces them with Laravel equivalents.
+     *
+     * @var array<string, string>
+     */
+    public $forbiddenVariables = [
         '$_GET' => 'Use request abstractions instead of reading from $_GET directly.',
         '$_POST' => 'Use request abstractions instead of reading from $_POST directly.',
         '$_REQUEST' => 'Use request abstractions instead of reading from $_REQUEST directly.',
@@ -18,7 +29,7 @@ class Zynqa_Sniffs_Files_ForbiddenGlobalAccessSniff implements PHP_CodeSniffer\S
         return [T_VARIABLE, T_GLOBAL];
     }
 
-    public function process(PHP_CodeSniffer\Files\File $phpcsFile, $stackPtr)
+    public function process(File $phpcsFile, $stackPtr)
     {
         $tokens = $phpcsFile->getTokens();
         $content = $tokens[$stackPtr]['content'];

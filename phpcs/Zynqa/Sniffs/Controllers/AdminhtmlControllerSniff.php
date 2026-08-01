@@ -2,14 +2,19 @@
 
 declare(strict_types=1);
 
-class Zynqa_Sniffs_Controllers_AdminhtmlControllerSniff implements PHP_CodeSniffer\Sniffs\Sniff
+namespace Zynqa\Sniffs\Controllers;
+
+use PHP_CodeSniffer\Files\File;
+use PHP_CodeSniffer\Sniffs\Sniff;
+
+class AdminhtmlControllerSniff implements Sniff
 {
     public function register()
     {
         return [T_CLASS];
     }
 
-    public function process(PHP_CodeSniffer\Files\File $phpcsFile, $stackPtr)
+    public function process(File $phpcsFile, $stackPtr)
     {
         $fileName = str_replace('\\', '/', $phpcsFile->getFilename());
         if (strpos($fileName, '/Controller/Adminhtml/') === false) {
@@ -39,7 +44,7 @@ class Zynqa_Sniffs_Controllers_AdminhtmlControllerSniff implements PHP_CodeSniff
         }
     }
 
-    private function extendsBackendAction(PHP_CodeSniffer\Files\File $phpcsFile, $stackPtr)
+    private function extendsBackendAction(File $phpcsFile, $stackPtr)
     {
         $contents = $phpcsFile->getTokensAsString(0, count($phpcsFile->getTokens()));
         if (!preg_match('/class\s+\w+\s+extends\s+([\\\\A-Za-z_][\\\\A-Za-z0-9_]*)/m', $contents, $matches)) {
@@ -85,7 +90,7 @@ class Zynqa_Sniffs_Controllers_AdminhtmlControllerSniff implements PHP_CodeSniff
         return false;
     }
 
-    private function resolveBackendActionAlias(PHP_CodeSniffer\Files\File $phpcsFile): string
+    private function resolveBackendActionAlias(File $phpcsFile): string
     {
         $contents = $phpcsFile->getTokensAsString(0, count($phpcsFile->getTokens()));
         if (!preg_match('/use\s+Magento\\\\Backend\\\\App\\\\Action(?:\s+as\s+([A-Za-z_][A-Za-z0-9_]*))?\s*;/m', $contents, $matches)) {

@@ -2,14 +2,19 @@
 
 declare(strict_types=1);
 
-class Zynqa_Sniffs_Templates_NoInlinePresentationSniff implements PHP_CodeSniffer\Sniffs\Sniff
+namespace Zynqa\Sniffs\Templates;
+
+use PHP_CodeSniffer\Files\File;
+use PHP_CodeSniffer\Sniffs\Sniff;
+
+class NoInlinePresentationSniff implements Sniff
 {
     public function register()
     {
         return [T_INLINE_HTML];
     }
 
-    public function process(PHP_CodeSniffer\Files\File $phpcsFile, $stackPtr)
+    public function process(File $phpcsFile, $stackPtr)
     {
         $fileName = str_replace('\\', '/', $phpcsFile->getFilename());
         if (substr($fileName, -6) !== '.phtml') {
