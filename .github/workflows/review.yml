@@ -1,4 +1,4 @@
-name: Claude Code Review
+name: Code Review
 
 on:
   workflow_call:
@@ -64,7 +64,7 @@ on:
         default: true
         type: boolean
       enable-ai-review:
-        description: 'Enable Layer 2 — Claude AI review'
+        description: 'Enable Layer 2 — AI review (provider-agnostic; see ai-provider)'
         required: false
         default: true
         type: boolean
@@ -243,10 +243,16 @@ jobs:
             }
 
             const eligibleStatuses = new Set(['added', 'modified', 'renamed', 'copied', 'changed']);
+
+            // A Blade template ends in .php but is not PHP source: PHPCS reports
+            // "No PHP code was found", and handing one to Pint or PHPStan is meaningless.
+            const isBladeTemplate = (filename) => /\.blade\.php$/i.test(filename);
+
             const phpcsFiles = files
               .filter((file) => eligibleStatuses.has(file.status))
               .map((file) => file.filename)
-              .filter((filename) => /\.(php|phtml)$/i.test(filename));
+              .filter((filename) => /\.(php|phtml)$/i.test(filename))
+              .filter((filename) => !isBladeTemplate(filename));
             const isRuntimeAnalysisTarget = (filename) => {
               if (!/\.php$/i.test(filename)) {
                 return false;
@@ -413,11 +419,20 @@ jobs:
           # workflow does not install a full Magento dependency graph. Passing
           # --configuration there would drop the override and change what those repos report.
           level_args=(--level=6)
+          analysis_paths="${{ steps.changed-files.outputs.php_paths }}"
+
           if [ "${{ inputs.stack }}" = "laravel" ]; then
             for config in phpstan.neon phpstan.neon.dist phpstan.dist.neon; do
               if [ -f "$config" ]; then
                 level_args=(--configuration="$config")
-                echo "Using PHPStan configuration $config"
+                # Analyse the scope the project configured, not the files this PR happened
+                # to touch. Passing paths on the command line overrides the config's own
+                # `paths`, which drags in directories the project deliberately excludes —
+                # a Laravel repo that scopes PHPStan to app/ would otherwise be told about
+                # Pest and Mockery magic in tests/ the moment a test file changed. Running
+                # the configured scope also makes CI agree with what developers run locally.
+                analysis_paths=""
+                echo "Using PHPStan configuration $config and the paths it declares"
                 break
               fi
             done
@@ -427,7 +442,7 @@ jobs:
             "${level_args[@]}" \
             --no-progress \
             --error-format=json \
-            ${{ steps.changed-files.outputs.php_paths }} > phpstan-report.json
+            $analysis_paths > phpstan-report.json
           exit_code=$?
           echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
           exit 0
@@ -509,10 +524,10 @@ jobs:
           done
 
   # ─────────────────────────────────────────
-  # Layer 2 — Claude AI Review (skips gracefully if no API key)
+  # Layer 2 — AI Review (skips gracefully if no API key)
   # ─────────────────────────────────────────
-  claude-review:
-    name: Claude AI Code Review
+  ai-review:
+    name: AI Reviewer
     runs-on: ubuntu-latest
     if: inputs.enable-ai-review == true
     permissions:
@@ -520,7 +535,7 @@ jobs:
       contents: read
 
     steps:
-      - name: Check Claude configuration
+      - name: Check AI provider configuration
         id: claude-config
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -529,7 +544,7 @@ jobs:
             echo "Anthropic API key is not configured. AI review is enabled, so this job cannot run."
             exit 1
           else
-            echo "Claude configuration is present."
+            echo "AI provider configuration is present."
           fi
 
       - name: Checkout repository
@@ -553,7 +568,7 @@ jobs:
         working-directory: .code-review-engine/actions/claude-reviewer
         run: npm ci
 
-      - name: Run Claude Reviewer
+      - name: Run AI Reviewer
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
@@ -612,7 +627,7 @@ jobs:
   auto-merge-gate:
     name: Auto-merge Gate
     runs-on: ubuntu-latest
-    needs: [pr-validation, module-registration, content-policy, static-analysis, claude-review, tests]
+    needs: [pr-validation, module-registration, content-policy, static-analysis, ai-review, tests]
     if: |
       always() &&
       (
@@ -632,8 +647,8 @@ jobs:
         (inputs.enable-static-analysis != true && needs.static-analysis.result == 'skipped')
       ) &&
       (
-        (inputs.enable-ai-review == true && needs.claude-review.result == 'success') ||
-        (inputs.enable-ai-review != true && needs.claude-review.result == 'skipped')
+        (inputs.enable-ai-review == true && needs.ai-review.result == 'success') ||
+        (inputs.enable-ai-review != true && needs.ai-review.result == 'skipped')
       ) &&
       (
         (inputs.enable-tests == true && needs.tests.result == 'success') ||
