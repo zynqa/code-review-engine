@@ -313,17 +313,31 @@ jobs:
       - name: Install project dependencies for static analysis
         if: steps.changed-files.outputs.php_count != '0' && steps.changed-files.outputs.is_standalone_module_repo != 'true'
         run: |
-          if [ ! -f composer.json ] || [ ! -f composer.lock ]; then
-            echo "composer.json or composer.lock not found; skipping project dependency bootstrap."
+          if [ ! -f composer.json ]; then
+            echo "composer.json not found; skipping project dependency bootstrap."
             exit 0
           fi
 
-          composer install \
-            --no-interaction \
-            --no-progress \
-            --no-scripts \
-            --prefer-dist \
-            --ignore-platform-reqs
+          # Applications commit a lock file and are installed from it. Libraries usually do
+          # not, and previously that meant no bootstrap at all: PHPStan then ran without an
+          # autoloader and reported every framework class as not found. Resolve fresh in that
+          # case so the analysis sees real types.
+          if [ -f composer.lock ]; then
+            composer install \
+              --no-interaction \
+              --no-progress \
+              --no-scripts \
+              --prefer-dist \
+              --ignore-platform-reqs
+          else
+            echo "No composer.lock (library repository); resolving dependencies fresh."
+            composer update \
+              --no-interaction \
+              --no-progress \
+              --no-scripts \
+              --prefer-dist \
+              --ignore-platform-reqs
+          fi
 
       - name: Register PHPCS standards
         if: steps.changed-files.outputs.phpcs_count != '0'
