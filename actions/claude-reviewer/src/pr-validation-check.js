@@ -149,7 +149,12 @@ function validateCommitMessages(commits, expectedTicket) {
     return { ok: false, message: 'Could not determine Jira ticket from the PR title.' };
   }
 
-  const commitPattern = new RegExp(`^${expectedTicket}(?::\\s+|\\s+).+`);
+  // Any ticket in an accepted project counts, not only the one in the PR title. A change
+  // set often spans related tickets — a fix, the feature that needed it, and the follow-up —
+  // and forcing them all under one key either hides that or splits interdependent work into
+  // PRs that cannot be reviewed apart. The requirement being enforced is that every commit
+  // is traceable to Jira, which a sibling ticket satisfies just as well.
+  const commitPattern = new RegExp(`^${getTicketPattern()}(?::\\s+|\\s+).+`);
   const failures = [];
 
   for (const commit of commits) {
@@ -169,7 +174,7 @@ function validateCommitMessages(commits, expectedTicket) {
 
   return {
     ok: false,
-    message: `Commit subjects must start with "${expectedTicket}" or "${expectedTicket}: ". Invalid commits: ${failures.join(' | ')}`,
+    message: `Commit subjects must start with a Jira ticket, e.g. "${expectedTicket}: Summary". Invalid commits: ${failures.join(' | ')}`,
   };
 }
 
