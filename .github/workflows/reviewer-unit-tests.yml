@@ -1,0 +1,30 @@
+name: Reviewer Unit Tests
+
+on:
+  pull_request:
+    paths:
+      - 'actions/claude-reviewer/**'
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        working-directory: actions/claude-reviewer
+        run: npm ci
+
+      - name: Run unit tests
+        working-directory: actions/claude-reviewer
+        run: npm test
