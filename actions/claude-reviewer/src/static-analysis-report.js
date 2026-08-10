@@ -154,12 +154,19 @@ function countByTool(findings) {
   }, {});
 }
 
-function buildSummary(findings) {
+function buildSummary(findings, depsInstallOutcome) {
   const toolCounts = countByTool(findings);
   const total = findings.length;
   const marker = '<!-- zynqa-static-analysis-summary -->';
 
   let body = `${marker}\n## Static Analysis Summary\n\n`;
+
+  if (depsInstallOutcome === 'failure') {
+    body += ':warning: Static analysis could not complete because the dependency install step failed. ' +
+      'Check the workflow logs for details. This commonly happens when a `require-dev` package ' +
+      'includes a Composer plugin that is not in `config.allow-plugins`.\n';
+    return body;
+  }
 
   if (total === 0) {
     body += 'No static-analysis issues were found.\n';
@@ -417,6 +424,7 @@ function setOutput(name, value) {
 
 async function main() {
   const reportsDir = process.env.STATIC_REPORTS_DIR || process.cwd();
+  const depsInstallOutcome = process.env.DEPS_INSTALL_OUTCOME || '';
   const changedLinesByPath = await fetchChangedLinesByPath();
   const findings = filterFindingsToChangedLines(dedupeFindings([
     ...parsePhpcs(path.join(reportsDir, 'phpcs-report.json')),
@@ -427,7 +435,7 @@ async function main() {
   findings.forEach(emitAnnotation);
   const inlineCommentsPosted = await postInlineComments(findings);
 
-  const summary = buildSummary(findings);
+  const summary = buildSummary(findings, depsInstallOutcome);
   await upsertSummaryComment(summary);
 
   setOutput('total_findings', findings.length);

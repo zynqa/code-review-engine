@@ -4,7 +4,8 @@
   "description": "Zynqa AI-powered code reviewer using Claude",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "test": "node --test src/**/*.test.js"
   },
   "dependencies": {
     "@octokit/rest": "^20.1.1",

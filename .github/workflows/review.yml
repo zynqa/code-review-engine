@@ -317,6 +317,7 @@ jobs:
           composer global require "${packages[@]}" --no-interaction --no-progress
 
       - name: Install project dependencies for static analysis
+        id: install-deps
         if: steps.changed-files.outputs.php_count != '0' && steps.changed-files.outputs.is_standalone_module_repo != 'true'
         run: |
           if [ ! -f composer.json ]; then
@@ -328,8 +329,13 @@ jobs:
           # not, and previously that meant no bootstrap at all: PHPStan then ran without an
           # autoloader and reported every framework class as not found. Resolve fresh in that
           # case so the analysis sees real types.
+          #
+          # --no-plugins is passed in both branches so that Composer plugins declared in
+          # require-dev (e.g. pestphp/pest-plugin) do not block the install. The bootstrap
+          # only needs an autoloader for PHPStan; no plugin logic is required here.
           if [ -f composer.lock ]; then
             composer install \
+              --no-plugins \
               --no-interaction \
               --no-progress \
               --no-scripts \
@@ -338,6 +344,7 @@ jobs:
           else
             echo "No composer.lock (library repository); resolving dependencies fresh."
             composer update \
+              --no-plugins \
               --no-interaction \
               --no-progress \
               --no-scripts \
@@ -483,6 +490,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           STATIC_REPORTS_DIR: ${{ github.workspace }}
+          DEPS_INSTALL_OUTCOME: ${{ steps.install-deps.outcome }}
         run: node .code-review-engine/actions/claude-reviewer/src/static-analysis-report.js
 
       - name: Fail on static-analysis findings
