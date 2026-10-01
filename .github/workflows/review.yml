@@ -78,6 +78,11 @@ on:
         required: false
         default: 'vendor/bin/phpunit --testsuite unit'
         type: string
+      skip-update-branch-bases:
+        description: 'Comma-separated base branches whose PRs are merged without first merging the base into the head branch (e.g. "staging"). Use for environment branches that hold work not bound for the default branch, so feature branches never pick it up.'
+        required: false
+        default: ''
+        type: string
       ai-provider:
         description: 'AI backend for the review job (e.g. anthropic). Reserved for when AI review is switched on; the reviewer resolves the provider from this value.'
         required: false
@@ -676,9 +681,16 @@ jobs:
 
       - name: Enable auto-merge
         uses: actions/github-script@v8
+        env:
+          SKIP_UPDATE_BRANCH_BASES: ${{ inputs.skip-update-branch-bases }}
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
+            const skipUpdateBranchBases = process.env.SKIP_UPDATE_BRANCH_BASES
+              .split(',')
+              .map((base) => base.trim())
+              .filter(Boolean);
+
             const { data: repository } = await github.rest.repos.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -726,18 +738,26 @@ jobs:
             }
 
             let branchUpdated = false;
-            try {
-              await github.rest.pulls.updateBranch({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: context.payload.pull_request.number,
-              });
-              branchUpdated = true;
-            } catch (error) {
-              if (error.status !== 422 || !String(error.message).includes('There are no new commits on the base branch')) {
-                throw error;
+            const baseRef = context.payload.pull_request.base.ref;
+            if (skipUpdateBranchBases.includes(baseRef)) {
+              // Merging the base into the head would carry this base's own unreleased
+              // work into the feature branch, and from there into its later PR to the
+              // default branch.
+              console.log(`Not updating the PR branch from "${baseRef}" (listed in skip-update-branch-bases).`);
+            } else {
+              try {
+                await github.rest.pulls.updateBranch({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: context.payload.pull_request.number,
+                });
+                branchUpdated = true;
+              } catch (error) {
+                if (error.status !== 422 || !String(error.message).includes('There are no new commits on the base branch')) {
+                  throw error;
+                }
+                console.log('PR branch is already up to date with the base branch.');
               }
-              console.log('PR branch is already up to date with the base branch.');
             }
 
             const fetchPullRequest = async () => github.graphql(`

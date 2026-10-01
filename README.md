@@ -83,7 +83,7 @@ The final gate only evaluates checks that are enabled for the consumer repositor
 Behavior:
 - optionally posts an approval review from `github-actions[bot]`
 - selects an allowed repository merge method automatically
-- updates the PR branch if needed
+- updates the PR branch if needed, except for PRs into a base listed in `skip-update-branch-bases` (environment branches such as `staging`, whose unreleased work must not reach feature branches)
 - prefers direct merge first
 - falls back to GitHub native auto-merge when direct merge is blocked by repository rules
 
