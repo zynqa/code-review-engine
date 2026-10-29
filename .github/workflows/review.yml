@@ -643,6 +643,7 @@ jobs:
     needs: [pr-validation, module-registration, content-policy, static-analysis, ai-review, tests]
     if: |
       always() &&
+      github.event.pull_request.draft == false &&
       (
         (inputs.enable-pr-validation == true && needs.pr-validation.result == 'success') ||
         (inputs.enable-pr-validation != true && needs.pr-validation.result == 'skipped')
