@@ -81,11 +81,16 @@ Optional PHPUnit job for repos that have a working test suite.
 The final gate only evaluates checks that are enabled for the consumer repository.
 
 Behavior:
+- reloads the pull request from the GitHub API immediately before approving and immediately before merging, and decides from that live response. The workflow event payload stays frozen at the moment the run started
+- skips the job successfully, without merging and without deleting the head branch, when the live pull request is not open, is a draft, has a head SHA other than the one this run reviewed, or carries a blocking label. A branch update performed by this gate is still merged; a later push is not
+- skips the whole job when the triggering event already marks the pull request as a draft, so a draft never receives an approval from the gate. Callers that open drafts should include `ready_for_review` in `pull_request.types` so the gate runs once the pull request is marked ready
 - optionally posts an approval review from `github-actions[bot]`
 - selects an allowed repository merge method automatically
 - updates the PR branch if needed, except for PRs into a base listed in `skip-update-branch-bases` (environment branches such as `staging`, whose unreleased work must not reach feature branches)
 - prefers direct merge first
 - falls back to GitHub native auto-merge when direct merge is blocked by repository rules
+
+Blocking labels default to `do not merge`, `do-not-merge`, and `wip`, matched case-insensitively and only as the full label name. Set `blocking-labels` to a comma-separated list to replace that set. A blank value keeps the defaults.
 
 ## Adding to a New Project
 
@@ -100,7 +105,7 @@ name: Code Review
 
 on:
   pull_request:
-    types: [opened, edited, synchronize, reopened]
+    types: [opened, edited, synchronize, reopened, ready_for_review]
 
 jobs:
   review:
@@ -128,6 +133,7 @@ jobs:
 | `jira-project-key` | `''` | Used for Jira ticket extraction and PR convention checks |
 | `enable-pr-validation` | `false` | Enforces PR title, branch, description, and commit conventions |
 | `enable-auto-approval` | `false` | Allows `github-actions[bot]` to approve the PR before merge |
+| `blocking-labels` | `do not merge,do-not-merge,wip` | Case-insensitive labels that stop auto-merge. Replaces the default list. A blank value keeps the defaults |
 | `enable-module-registration` | `true` | Validates Magento module registration consistency |
 | `enable-static-analysis` | `true` | Runs PHPCS, PHPStan, and PHPMD on changed files |
 | `enable-ai-review` | `true` | Runs Claude AI review |
@@ -197,7 +203,8 @@ code-review-engine/
 │       ├── config.js
 │       ├── pr-validation-check.js
 │       ├── module-registration-check.js
-│       └── static-analysis-report.js
+│       ├── static-analysis-report.js
+│       └── auto-merge-gate.js
 ├── phpcs/Zynqa/
 ├── prompts/
 ├── config/
@@ -206,7 +213,8 @@ code-review-engine/
 
 ## Operational Notes
 
-- Consumer repositories using `@main` pick up engine changes automatically.
+- Consumer repositories using `@main` pick up engine changes automatically, including the auto-merge state recheck. `blocking-labels` is optional; omitting it keeps the default label list. Repositories that pin a commit SHA or tag need to move that pin.
+- Repositories that open draft pull requests should add `ready_for_review` to the caller workflow's `pull_request` types. The gate does not merge a draft, and without that event it waits for a later `synchronize` or `edited` run. This is already how drafts behaved, because GitHub rejects merging them; the gate now skips those runs instead of failing.
 - Template changes still need to be copied into consumer repositories when new inputs are introduced.
 - `enable-auto-approval` requires repository settings that allow GitHub Actions to approve pull requests.
 - Auto-merge behavior also depends on the target repository's branch protection and ruleset configuration.

@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'actions/claude-reviewer/**'
+      - '.github/workflows/review.yml'
+      - '.github/workflows/reviewer-unit-tests.yml'
 
 jobs:
   unit-tests:
