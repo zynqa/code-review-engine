@@ -2,7 +2,9 @@ name: Code Review
 
 on:
   pull_request:
-    types: [opened, edited, synchronize, reopened]
+    # ready_for_review is required for drafts: the gate skips drafts, then runs
+    # again when the pull request is marked ready.
+    types: [opened, edited, synchronize, reopened, ready_for_review]
 
 jobs:
   review:
@@ -21,6 +23,7 @@ jobs:
       # Layer toggles — enable only what this project has configured
       enable-pr-validation: false    # Enable to enforce Jira-linked title, branch, description, and commits
       enable-auto-approval: false    # Enable only if repo rules allow GitHub Actions to approve PRs
+      blocking-labels: "do not merge,do-not-merge,wip" # Case-insensitive labels that block auto-merge. Blank keeps this default.
       enable-module-registration: true # Magento only — must be false for laravel repos
       enable-static-analysis: true   # No dependencies — always safe to enable
       enable-ai-review: true         # Requires ANTHROPIC_API_KEY org secret

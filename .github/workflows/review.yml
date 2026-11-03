@@ -53,6 +53,11 @@ on:
         required: false
         default: false
         type: boolean
+      blocking-labels:
+        description: 'Comma-separated labels that block auto-merge, compared case-insensitively. Replaces the default list. A blank value keeps the default: do not merge, do-not-merge, wip.'
+        required: false
+        default: 'do not merge,do-not-merge,wip'
+        type: string
       enable-static-analysis:
         description: 'Enable Layer 1 — PHP_CodeSniffer, PHPStan, PHPMD'
         required: false
@@ -637,12 +642,17 @@ jobs:
   # Layer 4 — Auto-merge gate
   # Waits only on layers that are actually enabled for this project
   # ─────────────────────────────────────────
+  # Drafts are excluded from the event when it already says so. A pull request
+  # that is closed, returned to draft, relabeled, or pushed to after the run
+  # starts is skipped by the live recheck in the gate step. The event payload
+  # is frozen at workflow start and cannot see those changes (ZNK-6, ZNK-13).
   auto-merge-gate:
     name: Auto-merge Gate
     runs-on: ubuntu-latest
     needs: [pr-validation, module-registration, content-policy, static-analysis, ai-review, tests]
     if: |
       always() &&
+      github.event.pull_request.draft != true &&
       (
         (inputs.enable-pr-validation == true && needs.pr-validation.result == 'success') ||
         (inputs.enable-pr-validation != true && needs.pr-validation.result == 'skipped')
@@ -679,252 +689,24 @@ jobs:
           app-id: ${{ secrets.AUTOMERGE_APP_ID }}
           private-key: ${{ secrets.AUTOMERGE_APP_PRIVATE_KEY }}
 
+      - name: Checkout review engine
+        uses: actions/checkout@v6
+        with:
+          # Same commit as this workflow file. Checking out main would run a
+          # different gate script than the workflow that called it.
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .code-review-engine
+
       - name: Enable auto-merge
         uses: actions/github-script@v8
         env:
           SKIP_UPDATE_BRANCH_BASES: ${{ inputs.skip-update-branch-bases }}
+          ENABLE_AUTO_APPROVAL: ${{ inputs.enable-auto-approval }}
+          BLOCKING_LABELS: ${{ inputs.blocking-labels }}
+          REVIEWED_SHA: ${{ github.event.pull_request.head.sha }}
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
-            const skipUpdateBranchBases = process.env.SKIP_UPDATE_BRANCH_BASES
-              .split(',')
-              .map((base) => base.trim())
-              .filter(Boolean);
-
-            const { data: repository } = await github.rest.repos.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-            });
-
-            const mergeMethods = [
-              repository.allow_merge_commit ? 'merge' : null,
-              repository.allow_squash_merge ? 'squash' : null,
-              repository.allow_rebase_merge ? 'rebase' : null,
-            ].filter(Boolean);
-
-            if (mergeMethods.length === 0) {
-              throw new Error('No merge methods are enabled for this repository.');
-            }
-
-            const isMergeMethodRejected = (message) =>
-              message.includes('merging is not allowed on this repository') ||
-              message.includes('Merge method');
-
-            if (${{ inputs.enable-auto-approval }}) {
-              const { data: reviews } = await github.rest.pulls.listReviews({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: context.payload.pull_request.number,
-              });
-
-              const latestStatesByAuthor = new Map();
-              for (const review of reviews) {
-                if (!review.user || !review.user.login) {
-                  continue;
-                }
-
-                latestStatesByAuthor.set(review.user.login, review.state);
-              }
-
-              if (latestStatesByAuthor.get('github-actions[bot]') !== 'APPROVED') {
-                await github.rest.pulls.createReview({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  pull_number: context.payload.pull_request.number,
-                  event: 'APPROVE',
-                  body: 'Automatically approved after all configured review-engine checks passed.',
-                });
-              }
-            }
-
-            let branchUpdated = false;
-            const baseRef = context.payload.pull_request.base.ref;
-            if (skipUpdateBranchBases.includes(baseRef)) {
-              // Merging the base into the head would carry this base's own unreleased
-              // work into the feature branch, and from there into its later PR to the
-              // default branch.
-              console.log(`Not updating the PR branch from "${baseRef}" (listed in skip-update-branch-bases).`);
-            } else {
-              try {
-                await github.rest.pulls.updateBranch({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  pull_number: context.payload.pull_request.number,
-                });
-                branchUpdated = true;
-              } catch (error) {
-                if (error.status !== 422 || !String(error.message).includes('There are no new commits on the base branch')) {
-                  throw error;
-                }
-                console.log('PR branch is already up to date with the base branch.');
-              }
-            }
-
-            const fetchPullRequest = async () => github.graphql(`
-              query($owner: String!, $repo: String!, $number: Int!) {
-                repository(owner: $owner, name: $repo) {
-                  pullRequest(number: $number) {
-                    id
-                    mergeStateStatus
-                    autoMergeRequest {
-                      enabledAt
-                    }
-                  }
-                }
-              }
-            `, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              number: context.payload.pull_request.number,
-            });
-
-            let pullRequest = (await fetchPullRequest()).repository.pullRequest;
-            const enableAutoMerge = async () => {
-              let lastError = null;
-              for (const mergeMethod of mergeMethods) {
-                try {
-                  await github.graphql(`
-                    mutation($pullRequestId: ID!, $mergeMethod: PullRequestMergeMethod!) {
-                      enablePullRequestAutoMerge(input: {
-                        pullRequestId: $pullRequestId
-                        mergeMethod: $mergeMethod
-                      }) {
-                        pullRequest {
-                          number
-                        }
-                      }
-                    }
-                  `, {
-                    pullRequestId: pullRequest.id,
-                    mergeMethod: mergeMethod.toUpperCase(),
-                  });
-                  return;
-                } catch (error) {
-                  const message = String(error.message || error);
-                  if (!isMergeMethodRejected(message)) {
-                    throw error;
-                  }
-
-                  lastError = error;
-                  console.log(`Auto-merge rejected method "${mergeMethod}". Trying next allowed method.`);
-                }
-              }
-
-              throw lastError;
-            };
-
-            const waitForStablePullRequest = async () => {
-              let latest = pullRequest;
-              for (let attempt = 1; attempt <= 6; attempt++) {
-                latest = (await fetchPullRequest()).repository.pullRequest;
-                if (latest.mergeStateStatus !== 'UNSTABLE') {
-                  return latest;
-                }
-
-                console.log(`PR is still unstable after branch update (attempt ${attempt}/6). Waiting 10s...`);
-                await new Promise((resolve) => setTimeout(resolve, 10000));
-              }
-
-              return latest;
-            };
-
-            const tryDirectMerge = async () => {
-              let lastError = null;
-              for (const mergeMethod of mergeMethods) {
-                try {
-                  await github.rest.pulls.merge({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    pull_number: context.payload.pull_request.number,
-                    merge_method: mergeMethod,
-                  });
-                  return;
-                } catch (error) {
-                  const message = String(error.message || error);
-                  if (!isMergeMethodRejected(message)) {
-                    throw error;
-                  }
-
-                  lastError = error;
-                  console.log(`Direct merge rejected method "${mergeMethod}". Trying next allowed method.`);
-                }
-              }
-
-              throw lastError;
-            };
-
-            if (!branchUpdated) {
-              try {
-                await tryDirectMerge();
-                console.log('Pull request merged directly.');
-                return;
-              } catch (error) {
-                const message = String(error.message || error);
-                const shouldFallbackToAutoMerge =
-                  error.status === 405 ||
-                  error.status === 409 ||
-                  message.includes('protected ref') ||
-                  message.includes('Repository rule violations found') ||
-                  message.includes('Head branch is out of date');
-
-                if (!shouldFallbackToAutoMerge) {
-                  throw error;
-                }
-
-                console.log(`Direct merge is blocked (${message}). Falling back to native auto-merge.`);
-              }
-            } else {
-              console.log('PR branch was updated from the base branch. Waiting for the refreshed head before trying to merge.');
-              pullRequest = await waitForStablePullRequest();
-
-              try {
-                await tryDirectMerge();
-                console.log('Pull request merged directly after branch update.');
-                return;
-              } catch (error) {
-                const message = String(error.message || error);
-                const shouldFallbackToAutoMerge =
-                  error.status === 405 ||
-                  error.status === 409 ||
-                  message.includes('protected ref') ||
-                  message.includes('Repository rule violations found') ||
-                  message.includes('Head branch was modified') ||
-                  message.includes('Head branch is out of date');
-
-                if (!shouldFallbackToAutoMerge) {
-                  throw error;
-                }
-
-                console.log(`Direct merge after branch update is blocked (${message}). Falling back to native auto-merge.`);
-              }
-            }
-
-            if (!pullRequest.autoMergeRequest) {
-              const enableAutoMergeWithRetry = async () => {
-                let lastError = null;
-                for (let attempt = 1; attempt <= 6; attempt++) {
-                  try {
-                    await enableAutoMerge();
-                    lastError = null;
-                    return;
-                  } catch (error) {
-                    const message = String(error.message || error);
-                    if (!message.includes('unstable status')) {
-                      throw error;
-                    }
-
-                    lastError = error;
-                    console.log(`PR is still unstable for auto-merge (attempt ${attempt}/6). Waiting 10s...`);
-                    await new Promise((resolve) => setTimeout(resolve, 10000));
-                  }
-                }
-
-                if (lastError) {
-                  throw lastError;
-                }
-              };
-
-              await enableAutoMergeWithRetry();
-            } else {
-              console.log('Auto-merge is already enabled for this pull request.');
-            }
+            const { runAutoMergeGate } = require('./.code-review-engine/actions/claude-reviewer/src/auto-merge-gate.js');
+            await runAutoMergeGate({ github, context, core });
